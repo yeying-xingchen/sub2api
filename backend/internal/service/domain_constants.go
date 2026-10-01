@@ -287,10 +287,10 @@ const (
 	SettingKeyPasskeyEnabled = "passkey_enabled" // 是否启用 Passkey 登录（仍要求有效的 WebAuthn 部署配置）
 
 	// 会话安全设置
-	SettingKeySessionBindingEnabled = "session_binding_enabled" // 会话 IP/UA 绑定（变更即失效），默认关闭
+	SettingKeySessionBindingEnabled = "session_binding_enabled" // 会话 User-Agent 绑定（UA 变更即失效），默认关闭
 
-	// 敏感操作 step-up 2FA 设置
-	SettingKeyStepUpEnabled = "step_up_enabled" // 敏感操作（导出/备份/S3配置/提升管理员等）要求 step-up 2FA，默认关闭
+	// 兼容字段：敏感操作不再强制 step-up 2FA
+	SettingKeyStepUpEnabled = "step_up_enabled"
 
 	// 面板 API 限流设置（JSON：PanelRateLimitSettings）
 	SettingKeyPanelRateLimitSettings = "panel_rate_limit_settings"
@@ -711,6 +711,13 @@ const (
 	SettingKeyOpenAICodexClientVersionSynced = "openai_codex_client_version_synced"
 	// SettingKeyOpenAICodexVersionAutoSyncEnabled 是否启用 Codex 客户端版本号自动同步（默认 true）。
 	SettingKeyOpenAICodexVersionAutoSyncEnabled = "openai_codex_version_auto_sync_enabled"
+	// Global Codex turn-state is acquired from a selected OAuth/setup-token account and
+	// injected into all Codex HTTP/WS requests when enabled.
+	SettingKeyOpenAIGlobalTurnStateEnabled         = "openai_global_turn_state_enabled"
+	SettingKeyOpenAIGlobalTurnStateAccountID       = "openai_global_turn_state_account_id"
+	SettingKeyOpenAIGlobalTurnState                = "openai_global_turn_state"
+	SettingKeyOpenAIGlobalTurnStateUpdatedAt       = "openai_global_turn_state_updated_at"
+	SettingKeyOpenAIGlobalTurnStateSourceAccountID = "openai_global_turn_state_source_account_id"
 	// SettingKeyClaudeCodeClientVersion 网关对 Anthropic 上游声明的 Claude Code CLI 客户端版本号（管理员覆写）。
 	// 空值表示跟随自动同步值；自动同步也没有结果时回退到 claude.CLIVersion()（环境变量覆盖 + 内置基线）。
 	// 版本太旧会被 Anthropic 拒绝（claude_code_version_too_old），故该值需保持跟随官方发布。

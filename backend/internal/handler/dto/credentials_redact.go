@@ -25,6 +25,9 @@ func RedactCredentials(in map[string]any) (out map[string]any, status map[string
 		}
 		out[k] = v
 	}
+	if isCredentialValuePresent(in[service.OpenAILoginCredentialsEncryptedKey]) {
+		out[service.OpenAILoginCredentialsConfiguredKey] = true
+	}
 	return out, status
 }
 

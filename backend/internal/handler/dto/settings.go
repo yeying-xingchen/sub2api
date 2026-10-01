@@ -42,7 +42,11 @@ type SystemSettings struct {
 	PasskeyConfigured                   bool                     `json:"passkey_configured"`
 	PasskeyRPID                         string                   `json:"passkey_rp_id"`
 	PasskeyRPOrigins                    []string                 `json:"passkey_rp_origins"`
-	SessionBindingEnabled               bool                     `json:"session_binding_enabled"`  // 会话 IP/UA 绑定
+	SessionBindingEnabled               bool                     `json:"session_binding_enabled"` // 会话 User-Agent 绑定
+	OpenAIGlobalTurnStateEnabled        bool                     `json:"openai_global_turn_state_enabled"`
+	OpenAIGlobalTurnStateAccountID      int64                    `json:"openai_global_turn_state_account_id"`
+	OpenAIGlobalTurnStateConfigured     bool                     `json:"openai_global_turn_state_configured"`
+	OpenAIGlobalTurnStateUpdatedAt      string                   `json:"openai_global_turn_state_updated_at"`
 	StepUpEnabled                       bool                     `json:"step_up_enabled"`          // 敏感操作 step-up 2FA
 	AuditLogRetentionDays               int                      `json:"audit_log_retention_days"` // 审计日志保留天数
 	LoginAgreementEnabled               bool                     `json:"login_agreement_enabled"`

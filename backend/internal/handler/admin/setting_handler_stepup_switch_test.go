@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -45,55 +44,52 @@ func doUpdateSettings(t *testing.T, h *SettingHandler, body map[string]any, prep
 	return rec
 }
 
-// 开启开关（false→true）：无认证上下文时拒绝，且带专用错误标记。
-func TestUpdateSettingsEnableStepUpRejectsWithoutSession(t *testing.T) {
+// 开启兼容性开关不需要认证或 TOTP，且设置仍可正常保存。
+func TestUpdateSettingsEnableStepUpDoesNotRequire2FA(t *testing.T) {
 	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
 
 	rec := doUpdateSettings(t, h, map[string]any{"step_up_enabled": true}, nil)
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	require.Contains(t, rec.Body.String(), "STEP_UP_ENABLE_REQUIRES_TOTP")
-	require.NotEqual(t, "true", repo.values[service.SettingKeyStepUpEnabled])
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "true", repo.values[service.SettingKeyStepUpEnabled])
 }
 
-// 开启开关：admin API key（机器凭证）一律拒绝，reason 与门控保持一致便于前端分流。
-func TestUpdateSettingsEnableStepUpRejectsAdminAPIKey(t *testing.T) {
-	h, _ := newStepUpSwitchTestHandler(t, map[string]string{})
+// 兼容性开关允许通过 admin API key 修改，不再触发 2FA 门控。
+func TestUpdateSettingsEnableStepUpAllowsAdminAPIKey(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
 
 	rec := doUpdateSettings(t, h, map[string]any{"step_up_enabled": true}, func(c *gin.Context) {
 		c.Set("auth_method", service.AuditAuthMethodAdminAPIKey)
 	})
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	require.Contains(t, rec.Body.String(), "STEP_UP_ADMIN_API_KEY_FORBIDDEN")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "true", repo.values[service.SettingKeyStepUpEnabled])
 }
 
-// 开启开关：有认证会话但 userService 未注入时 fail-closed（500），不得放行。
-func TestUpdateSettingsEnableStepUpFailsClosedWithoutUserService(t *testing.T) {
+// 开启兼容性开关不依赖用户服务或 TOTP 校验。
+func TestUpdateSettingsEnableStepUpAllowsWithoutUserService(t *testing.T) {
 	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
 
-	rec := doUpdateSettings(t, h, map[string]any{"step_up_enabled": true}, func(c *gin.Context) {
-		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1})
-	})
+	rec := doUpdateSettings(t, h, map[string]any{"step_up_enabled": true}, nil)
 
-	require.Equal(t, http.StatusInternalServerError, rec.Code)
-	require.NotEqual(t, "true", repo.values[service.SettingKeyStepUpEnabled])
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "true", repo.values[service.SettingKeyStepUpEnabled])
 }
 
-// 关闭开关（true→false）本身是敏感操作：无认证上下文时被 step-up 门控以 401 拦截。
-func TestUpdateSettingsDisableStepUpRequiresStepUp(t *testing.T) {
+// 关闭兼容性开关不需要认证或 step-up 2FA。
+func TestUpdateSettingsDisableStepUpDoesNotRequire2FA(t *testing.T) {
 	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
 		service.SettingKeyStepUpEnabled: "true",
 	})
 
 	rec := doUpdateSettings(t, h, map[string]any{"step_up_enabled": false}, nil)
 
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
-	require.Equal(t, "true", repo.values[service.SettingKeyStepUpEnabled])
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "false", repo.values[service.SettingKeyStepUpEnabled])
 }
 
-// 关闭开关：admin API key 被 step-up 门控以 403 拦截。
-func TestUpdateSettingsDisableStepUpRejectsAdminAPIKey(t *testing.T) {
+// 关闭兼容性开关允许通过 admin API key，不再触发 2FA 门控。
+func TestUpdateSettingsDisableStepUpAllowsAdminAPIKey(t *testing.T) {
 	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
 		service.SettingKeyStepUpEnabled: "true",
 	})
@@ -102,9 +98,8 @@ func TestUpdateSettingsDisableStepUpRejectsAdminAPIKey(t *testing.T) {
 		c.Set("auth_method", service.AuditAuthMethodAdminAPIKey)
 	})
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	require.Contains(t, rec.Body.String(), "STEP_UP_ADMIN_API_KEY_FORBIDDEN")
-	require.Equal(t, "true", repo.values[service.SettingKeyStepUpEnabled])
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "false", repo.values[service.SettingKeyStepUpEnabled])
 }
 
 // 无状态转换（false→false）：不触发任何转换校验，常规保存成功且默认持久化为 false。
@@ -115,7 +110,7 @@ func TestUpdateSettingsStepUpNoTransitionSkipsGate(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "false", repo.values[service.SettingKeyStepUpEnabled])
-	// 会话 IP/UA 绑定默认关闭：未显式提交时持久化 false。
+	// 会话 User-Agent 绑定默认关闭：未显式提交时持久化 false。
 	require.Equal(t, "false", repo.values[service.SettingKeySessionBindingEnabled])
 }
 

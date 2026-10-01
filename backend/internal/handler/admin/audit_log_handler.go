@@ -14,7 +14,7 @@ import (
 )
 
 // AuditLogHandler 操作审计日志管理接口。
-// 审计日志仅管理员可见；不提供单条删除，仅支持带 TOTP 验证的全量清空。
+// 审计日志仅管理员可见；不提供单条删除，仅支持带留痕记录的全量清空。
 type AuditLogHandler struct {
 	auditService *service.AuditLogService
 	totpService  *service.TotpService
@@ -100,42 +100,14 @@ func (h *AuditLogHandler) Get(c *gin.Context) {
 	response.Success(c, item)
 }
 
-type auditLogClearRequest struct {
-	TotpCode string `json:"totp_code" binding:"required"`
-}
-
 // Clear 全量清空审计日志。
 // POST /api/v1/admin/audit-logs/clear
 //
-// 安全要求（与需求对齐）：
-//  1. 每次清空都必须现场验证 TOTP 码（不复用 step-up sudo 窗口）
-//  2. 未启用 TOTP 的管理员不允许清空
-//  3. admin API key（机器凭证）不允许清空
-//  4. 清空完成后同步写入一条留痕记录（操作者、IP、UA、删除行数）
+// 清空操作仍要求管理员身份，并在完成后同步写入留痕记录。
 func (h *AuditLogHandler) Clear(c *gin.Context) {
-	if c.GetString("auth_method") == service.AuditAuthMethodAdminAPIKey {
-		response.ErrorWithDetails(c, http.StatusForbidden,
-			"Admin API key cannot clear audit logs; a two-factor verified admin session is required",
-			"STEP_UP_ADMIN_API_KEY_FORBIDDEN", nil)
-		return
-	}
-
 	subject, ok := middleware.GetAuthSubjectFromContext(c)
 	if !ok || subject.UserID <= 0 {
 		response.Unauthorized(c, "Unauthorized")
-		return
-	}
-
-	var req auditLogClearRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.ErrorWithDetails(c, http.StatusBadRequest,
-			"TOTP code is required to clear audit logs", "TOTP_CODE_REQUIRED", nil)
-		return
-	}
-
-	// 校验 TOTP：未启用（ErrTotpNotSetup）、码错误、尝试过多均在此拦截。
-	if err := h.totpService.VerifyCode(c.Request.Context(), subject.UserID, strings.TrimSpace(req.TotpCode)); err != nil {
-		response.ErrorFrom(c, err)
 		return
 	}
 

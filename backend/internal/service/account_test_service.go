@@ -961,8 +961,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if resp.StatusCode == http.StatusTooManyRequests {
 			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
 		}
-		// 401 Unauthorized: 标记账号为永久错误
-		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
+		// Configured OAuth accounts recover through the same login service as
+		// gateway 401s. Preserve the credential snapshot actually used by this
+		// probe, including when the selected account is a shadow.
+		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil && !s.tryOpenAIAccountTestAutoReauth(ctx, credentialAccount) {
 			errMsg := fmt.Sprintf("Authentication failed (401): %s", string(body))
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
 		}
@@ -971,6 +973,15 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 	// Process SSE stream
 	return s.processOpenAIStream(c, resp.Body)
+}
+
+func (s *AccountTestService) tryOpenAIAccountTestAutoReauth(ctx context.Context, credentialAccount *Account) bool {
+	if s == nil || s.openaiGatewayService == nil || s.openaiGatewayService.rateLimitService == nil {
+		return false
+	}
+	stateCtx, cancel := openAIAccountStateContext(ctx)
+	defer cancel()
+	return s.openaiGatewayService.rateLimitService.tryOpenAIAutoReauth(stateCtx, credentialAccount)
 }
 
 // testGrokAccountConnection routes Grok admin connectivity tests by explicit mode first,
@@ -3196,6 +3207,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 		}
 	}()
 	if resp.StatusCode >= 400 {
+		if resp.StatusCode == http.StatusUnauthorized {
+			s.tryOpenAIAccountTestAutoReauth(ctx, credentialAccount)
+		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		body = redactAgentIdentitySensitiveBodyForAccount(ctx, s.accountRepo, credentialAccount, body)
 		message := strings.TrimSpace(extractUpstreamErrorMessage(body))

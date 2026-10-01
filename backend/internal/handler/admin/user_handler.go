@@ -13,7 +13,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/handler/quotaview"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -278,13 +277,6 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// 创建管理员账号属权限敏感操作：需最近完成 step-up 2FA 验证。
-	if req.Role == service.RoleAdmin {
-		if !middleware.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
-			return
-		}
-	}
-
 	user, err := h.adminService.CreateUser(c.Request.Context(), &service.CreateUserInput{
 		Email:                req.Email,
 		Password:             req.Password,
@@ -326,21 +318,6 @@ func (h *UserHandler) Update(c *gin.Context) {
 	if req.Role == service.RoleUser && userID == getAdminIDFromContext(c) {
 		response.BadRequest(c, "cannot demote yourself from admin")
 		return
-	}
-
-	// 把普通用户提升为管理员属权限敏感操作：需最近完成 step-up 2FA 验证。
-	// 目标已是管理员时（前端编辑表单总是携带 role）不触发，避免日常编辑被打断。
-	if req.Role == service.RoleAdmin {
-		target, err := h.adminService.GetUser(c.Request.Context(), userID)
-		if err != nil {
-			response.ErrorFrom(c, err)
-			return
-		}
-		if target.Role != service.RoleAdmin {
-			if !middleware.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
-				return
-			}
-		}
 	}
 
 	// 使用指针类型直接传递，nil 表示未提供该字段

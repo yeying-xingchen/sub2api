@@ -223,6 +223,11 @@ func NewAccountService(accountRepo AccountRepository, groupRepo GroupRepository)
 
 // Create 创建账号
 func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (*Account, error) {
+	credentials, err := prepareOpenAIReauthCredentials(req.Platform, req.Type, nil, req.Credentials, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Credentials = credentials
 	// 验证分组是否存在（如果指定了分组）
 	if len(req.GroupIDs) > 0 {
 		if err := s.validateGroupIDsExist(ctx, req.GroupIDs); err != nil {
@@ -320,6 +325,7 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 		return nil, fmt.Errorf("get account: %w", err)
 	}
 
+	ctx = WithOpenAIAccountUpdateSnapshot(ctx, account)
 	// 更新字段
 	if req.Name != nil {
 		account.Name = *req.Name
@@ -329,7 +335,11 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 	}
 
 	if req.Credentials != nil {
-		account.Credentials = SanitizeStoredCredentials(account.Platform, *req.Credentials)
+		credentials, err := prepareOpenAIReauthCredentials(account.Platform, account.Type, account.Credentials, *req.Credentials, nil)
+		if err != nil {
+			return nil, err
+		}
+		account.Credentials = SanitizeStoredCredentials(account.Platform, MergePreservingSensitiveCreds(account.Credentials, credentials))
 	}
 
 	if req.Extra != nil {

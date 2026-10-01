@@ -247,6 +247,11 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpenAICodexClientVersion:                           "",
 		SettingKeyOpenAICodexClientVersionSynced:                     "",
 		SettingKeyOpenAICodexVersionAutoSyncEnabled:                  "true",
+		SettingKeyOpenAIGlobalTurnStateEnabled:                       "false",
+		SettingKeyOpenAIGlobalTurnStateAccountID:                     "0",
+		SettingKeyOpenAIGlobalTurnState:                              "",
+		SettingKeyOpenAIGlobalTurnStateUpdatedAt:                     "",
+		SettingKeyOpenAIGlobalTurnStateSourceAccountID:               "0",
 		SettingKeyClaudeCodeClientVersion:                            "",
 		SettingKeyClaudeCodeClientVersionSynced:                      "",
 		SettingKeyClaudeCodeVersionAutoSyncEnabled:                   "true",
@@ -273,6 +278,14 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 	}
 
 	return s.settingRepo.SetMultiple(ctx, defaults)
+}
+
+func parseInt64Setting(value string) int64 {
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil || parsed < 0 {
+		return 0
+	}
+	return parsed
 }
 
 func parseForwardedClientIPHeadersSetting(value string) ([]string, error) {
@@ -330,7 +343,11 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		TotpEnabled:                            settings[SettingKeyTotpEnabled] == "true",
 		PasskeyEnabled:                         s.passkeySettingEnabled(settings),
 		SessionBindingEnabled:                  settings[SettingKeySessionBindingEnabled] == "true", // 默认关闭
-		StepUpEnabled:                          settings[SettingKeyStepUpEnabled] == "true",         // 默认关闭
+		OpenAIGlobalTurnStateEnabled:           settings[SettingKeyOpenAIGlobalTurnStateEnabled] == "true",
+		OpenAIGlobalTurnStateAccountID:         parseInt64Setting(settings[SettingKeyOpenAIGlobalTurnStateAccountID]),
+		OpenAIGlobalTurnState:                  strings.TrimSpace(settings[SettingKeyOpenAIGlobalTurnState]),
+		OpenAIGlobalTurnStateUpdatedAt:         strings.TrimSpace(settings[SettingKeyOpenAIGlobalTurnStateUpdatedAt]),
+		StepUpEnabled:                          settings[SettingKeyStepUpEnabled] == "true", // 默认关闭
 		AuditLogRetentionDays:                  parseAuditLogRetentionDays(settings[SettingKeyAuditLogRetentionDays]),
 		LoginAgreementEnabled:                  settings[SettingKeyLoginAgreementEnabled] == "true",
 		LoginAgreementMode:                     normalizeLoginAgreementMode(settings[SettingKeyLoginAgreementMode]),

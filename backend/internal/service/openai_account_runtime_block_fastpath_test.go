@@ -35,6 +35,41 @@ func (r *oauth429RateLimitRepo) SetModelRateLimit(_ context.Context, _ int64, sc
 	return nil
 }
 
+func TestOpenAI401FastPath_AutoReauthDoesNotAddRuntimeBlock(t *testing.T) {
+	for _, name := range []string{"stale token", "cooldown", "shadow", "access state"} {
+		t.Run(name, func(t *testing.T) {
+			owner := reauthTestAccount()
+			account := snapshotOAuthRefreshAccount(owner)
+			body := []byte(`{"error":{"code":"token_revoked"}}`)
+			switch name {
+			case "stale token":
+				account.Credentials["access_token"] = "previous-token"
+			case "shadow":
+				account = &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+					ParentAccountID: &owner.ID, QuotaDimension: QuotaDimensionSpark}
+			case "access state":
+				body = []byte(`{"error":{"code":"account_deactivated"}}`)
+			}
+			legacy := &openAIAccountTestRepo{}
+			repo := &reauthRepoStub{AccountRepository: legacy, account: owner}
+			rateLimits := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+			rateLimits.openAIAutoReauth = NewOpenAIAutoReauthService(repo, nil, reauthTestCipher{}, nil)
+			svc := &OpenAIGatewayService{rateLimitService: rateLimits}
+			rateLimits.SetAccountRuntimeBlocker(svc)
+
+			require.True(t, svc.handleOpenAIAccountUpstreamError(context.Background(), account, http.StatusUnauthorized, nil, body))
+			require.False(t, svc.isOpenAIAccountRuntimeBlocked(account), "the recovery claim must be the only scheduling pause")
+			require.False(t, svc.isOpenAIAccountRuntimeBlocked(owner))
+			require.Zero(t, legacy.setErrorID, "handled 401 must not reach permanent-error branches")
+			if name == "stale token" {
+				require.Zero(t, repo.claims)
+			} else {
+				require.Equal(t, 1, repo.claims)
+			}
+		})
+	}
+}
+
 func TestOpenAI429FastPath_KeepsOAuthAccountSchedulableDuringRetryWindow(t *testing.T) {
 	repo := &oauth429RateLimitRepo{}
 	rateLimits := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)

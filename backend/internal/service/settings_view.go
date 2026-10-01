@@ -22,7 +22,11 @@ type SystemSettings struct {
 	InvitationCodeEnabled               bool
 	TotpEnabled                         bool // TOTP 双因素认证
 	PasskeyEnabled                      bool // Passkey 登录
-	SessionBindingEnabled               bool // 会话 IP/UA 绑定（变更即失效）
+	SessionBindingEnabled               bool // 会话 User-Agent 绑定（UA 变更即失效）
+	OpenAIGlobalTurnStateEnabled        bool // 自动获取并全站注入 Codex turn-state
+	OpenAIGlobalTurnStateAccountID      int64
+	OpenAIGlobalTurnState               string
+	OpenAIGlobalTurnStateUpdatedAt      string
 	StepUpEnabled                       bool // 敏感操作 step-up 2FA 门控
 	AuditLogRetentionDays               int  // 审计日志保留天数（<=0 永久保留）
 	LoginAgreementEnabled               bool

@@ -137,6 +137,7 @@ type OpenAIQuotaService struct {
 	tokenProvider        *OpenAITokenProvider
 	privacyClientFactory PrivacyClientFactory
 	referralClient       OpenAIReferralClient
+	rateLimitService     *RateLimitService
 	agentIdentityTaskMu  sync.Mutex
 	agentIdentityWS      agentIdentityWSConnectionInvalidator
 }
@@ -201,6 +202,7 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 				continue
 			}
 			status := resp.StatusCode
+			s.tryAutoReauthOnUnauthorized(ctx, accountID, accessToken, status)
 			if isOpenAIAutoResetContext(ctx) {
 				slog.Warn("openai_quota_query_failed", "account_id", accountID, "status", status, "source", "auto_reset")
 				return nil, infraerrors.Newf(mapUpstreamStatus(status), "OPENAI_QUOTA_UPSTREAM_ERROR", "upstream returned %d", status)
@@ -318,6 +320,7 @@ func (s *OpenAIQuotaService) queryResetCreditDetails(ctx context.Context, client
 		return nil
 	}
 	if !resp.IsSuccessState() {
+		s.tryAutoReauthOnUnauthorized(ctx, accountID, accessToken, resp.StatusCode)
 		slog.Warn("openai_quota_reset_credit_details_failed", "account_id", accountID, "status", resp.StatusCode)
 		return nil
 	}
@@ -419,6 +422,7 @@ func (s *OpenAIQuotaService) resetCredit(ctx context.Context, accountID int64, c
 				continue
 			}
 			status := resp.StatusCode
+			s.tryAutoReauthOnUnauthorized(ctx, accountID, accessToken, status)
 			if targeted {
 				slog.Warn("openai_quota_targeted_reset_failed", "account_id", accountID, "status", status)
 				return nil, infraerrors.Newf(mapUpstreamStatus(status), "OPENAI_QUOTA_RESET_UPSTREAM_ERROR", "upstream returned %d", status)
@@ -436,6 +440,31 @@ func (s *OpenAIQuotaService) resetCredit(ctx context.Context, accountID int64, c
 		"windows_reset", payload.WindowsReset,
 	)
 	return &payload, nil
+}
+
+// tryAutoReauthOnUnauthorized carries the token used by the failed request to
+// the shared recovery service. TokenProvider may have refreshed it after the
+// original account read, and a shadow's owner may have changed tokens since.
+func (s *OpenAIQuotaService) tryAutoReauthOnUnauthorized(ctx context.Context, accountID int64, accessToken string, status int) {
+	if status != http.StatusUnauthorized || accessToken == "" || s == nil || s.accountRepo == nil || s.rateLimitService == nil {
+		return
+	}
+	stateCtx, cancel := openAIAccountStateContext(ctx)
+	defer cancel()
+	account, err := s.accountRepo.GetByID(stateCtx, accountID)
+	if err != nil || account == nil {
+		return
+	}
+	owner, err := resolveCredentialAccount(stateCtx, s.accountRepo, account)
+	if err != nil || owner == nil {
+		return
+	}
+	attempted := snapshotOAuthRefreshAccount(owner)
+	if attempted.Credentials == nil {
+		attempted.Credentials = make(map[string]any)
+	}
+	attempted.Credentials["access_token"] = accessToken
+	s.rateLimitService.tryOpenAIAutoReauth(stateCtx, attempted)
 }
 
 // prepareUpstreamCall loads the account, validates it, obtains a fresh access

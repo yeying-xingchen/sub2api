@@ -99,3 +99,13 @@ func TestRedactCredentials_AllKnownSensitiveKeys(t *testing.T) {
 		require.True(t, status["has_"+k], "key %s 应在 status 中标记为已配置", k)
 	}
 }
+
+func TestRedactCredentials_OpenAIReauthIsWriteOnly(t *testing.T) {
+	in := map[string]any{"openai_login_credentials": "email----password----secret", "openai_login_credentials_encrypted": "ciphertext", "openai_auto_reauth_enabled": true}
+	out, _ := RedactCredentials(in)
+	require.NotContains(t, out, "openai_login_credentials")
+	require.NotContains(t, out, "openai_login_credentials_encrypted")
+	require.Equal(t, true, out["openai_login_credentials_configured"])
+	require.Equal(t, true, out["openai_auto_reauth_enabled"])
+	require.Contains(t, in, "openai_login_credentials_encrypted")
+}

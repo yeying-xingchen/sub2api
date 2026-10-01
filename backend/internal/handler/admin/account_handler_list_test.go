@@ -350,6 +350,18 @@ func TestAccountHandlerListKeepsSchedulerScoreScopedToFilter(t *testing.T) {
 	require.Equal(t, item.SchedulerScores[0].BaseScore, item.SchedulerScore.BaseScore)
 }
 
+func TestAccountHandlerListPassesPlatformAndTypeFilters(t *testing.T) {
+	router, adminSvc := setupAccountListRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts?page=1&page_size=20&platform=gemini&type=service_account", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "gemini", adminSvc.lastListAccounts.platform)
+	require.Equal(t, "service_account", adminSvc.lastListAccounts.accountType)
+}
+
 func TestAccountHandlerListSchedulerScoreIgnoresPagination(t *testing.T) {
 	router, adminSvc := setupAccountListRouter()
 	now := time.Now().UTC()

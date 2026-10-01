@@ -1195,6 +1195,25 @@ export interface OpenCodeGoUsageSettings {
   debounce_minutes: number
 }
 
+export interface OpenAIAutoReauthCredentialInput {
+  openai_auto_reauth_enabled: boolean
+  /** Write-only original email----password----2FA line. Omit to retain the saved secret. */
+  openai_login_credentials?: string
+}
+
+export interface OpenAIAutoReauthCredentialStatus {
+  openai_auto_reauth_enabled?: boolean
+  openai_login_credentials_configured?: boolean
+}
+
+export interface OpenAIAutoReauthStatus {
+  status: 'running' | 'succeeded' | 'failed'
+  retry_after?: string
+  error?: string
+  last_attempt_at?: string
+  last_success_at?: string
+}
+
 export interface Account {
   id: number
   name: string
@@ -1205,12 +1224,13 @@ export interface Account {
   // api_key / session_key / cookie / aws_secret_access_key / aws_session_token /
   // service_account_json / service_account / private_key 不会出现，
   // 改为通过 credentials_status.has_<key> 暴露存在性。
-  credentials?: Record<string, unknown>
+  credentials?: Record<string, unknown> & OpenAIAutoReauthCredentialStatus
   credentials_status?: Record<string, boolean>
   ollama_cloud_usage?: OllamaCloudUsageState
   opencode_go_usage?: OpenCodeGoUsageState
   // Extra fields including Codex usage, OpenAI compact capability, and model-level rate limits.
   extra?: (CodexUsageSnapshot & OpenAICompactState & {
+    openai_auto_reauth?: OpenAIAutoReauthStatus
     model_rate_limits?: Record<string, { rate_limited_at: string; rate_limit_reset_at: string }>
     antigravity_credits_overages?: Record<string, { activated_at: string; active_until: string }>
     upstream_billing_probe_enabled?: boolean

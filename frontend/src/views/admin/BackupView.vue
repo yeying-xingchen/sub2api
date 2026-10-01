@@ -410,7 +410,6 @@
         </div>
       </transition>
     </teleport>
-    <TotpStepUpDialog :controller="backupStepUp" />
 </template>
 
 <script setup lang="ts">
@@ -426,25 +425,10 @@ import type {
   BackupDownloadPart,
   ImageStorageConfig,
 } from '@/api/admin/backup'
-import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
-import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import BackupArchiveSettings from '@/components/admin/BackupArchiveSettings.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
-const backupStepUp = useStepUp()
-
-// 敏感操作被 2FA 门控拦截时的统一提示。
-function reportStepUpBlocked(error: unknown): boolean {
-  if (!isStepUpBlocked(error)) return false
-  appStore.showError(
-    stepUpBlockReason(error) === 'STEP_UP_ADMIN_API_KEY_FORBIDDEN'
-      ? t('stepUp.adminApiKeyForbidden')
-      : t('stepUp.notEnabled')
-  )
-  return true
-}
-
 // S3 config
 const s3Form = ref<BackupS3Config>({
   endpoint: '',
@@ -671,14 +655,10 @@ async function loadS3Config() {
 async function saveS3Config() {
   savingS3.value = true
   try {
-    await backupStepUp.run(() => adminAPI.backup.updateS3Config(s3Form.value))
+    await adminAPI.backup.updateS3Config(s3Form.value)
     appStore.showSuccess(t('admin.backup.s3.saved'))
     await loadS3Config()
   } catch (error) {
-    if (isStepUpCancelled(error)) {
-      savingS3.value = false
-      return
-    }
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
   } finally {
     savingS3.value = false
@@ -703,14 +683,10 @@ async function loadImageStorageConfig() {
 async function saveImageStorageConfig() {
   savingImageStorage.value = true
   try {
-    await backupStepUp.run(() => adminAPI.backup.updateImageStorageConfig(imageStorageForm.value))
+    await adminAPI.backup.updateImageStorageConfig(imageStorageForm.value)
     appStore.showSuccess(t('admin.backup.imageStorage.saved'))
     await loadImageStorageConfig()
   } catch (error) {
-    if (isStepUpCancelled(error)) {
-      savingImageStorage.value = false
-      return
-    }
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
   } finally {
     savingImageStorage.value = false
@@ -800,19 +776,11 @@ async function loadBackups() {
 async function createBackup() {
   creatingBackup.value = true
   try {
-    const record = await backupStepUp.run(() => adminAPI.backup.createBackup({ expire_days: manualExpireDays.value }))
+    const record = await adminAPI.backup.createBackup({ expire_days: manualExpireDays.value })
     // 插入到列表顶部
     backups.value.unshift(record)
     startPolling(record.id)
   } catch (error: any) {
-    if (isStepUpCancelled(error)) {
-      creatingBackup.value = false
-      return
-    }
-    if (reportStepUpBlocked(error)) {
-      creatingBackup.value = false
-      return
-    }
     if (error?.response?.status === 409) {
       appStore.showWarning(t('admin.backup.operations.alreadyInProgress'))
     } else {
@@ -824,7 +792,7 @@ async function createBackup() {
 
 async function downloadBackup(id: string) {
   try {
-    const result = await backupStepUp.run(() => adminAPI.backup.getDownloadURL(id))
+    const result = await adminAPI.backup.getDownloadURL(id)
     if (result.parts && result.parts.length > 0) {
       downloadParts.value = result.parts
       downloadPartsModalOpen.value = true
@@ -833,15 +801,12 @@ async function downloadBackup(id: string) {
     if (!result.url) {
       throw new Error(t('admin.backup.actions.downloadFailed'))
     }
-    // 预签名 URL 带 attachment disposition，同页 anchor 导航直接触发下载；
-    // 不用 window.open：step-up 弹窗 await 会耗尽瞬态用户激活，新标签页会被浏览器拦截。
+    // 预签名 URL 带 attachment disposition，同页 anchor 导航直接触发下载。
     const link = document.createElement('a')
     link.href = result.url
     link.rel = 'noopener'
     link.click()
   } catch (error) {
-    if (isStepUpCancelled(error)) return
-    if (reportStepUpBlocked(error)) return
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
   }
 }
@@ -857,13 +822,11 @@ async function restoreBackup(id: string) {
   if (!password) return
   restoringId.value = id
   try {
-    const record = await backupStepUp.run(() => adminAPI.backup.restoreBackup(id, password))
+    const record = await adminAPI.backup.restoreBackup(id, password)
     updateRecordInList(record)
     startRestorePolling(id)
   } catch (error: any) {
     restoringId.value = ''
-    if (isStepUpCancelled(error)) return
-    if (reportStepUpBlocked(error)) return
     // apiClient 拦截器把 HTTP 错误归一化为顶层 { status } 平面对象（无 response 字段）
     if (error?.status === 409 || error?.response?.status === 409) {
       appStore.showWarning(t('admin.backup.operations.restoreRunning'))

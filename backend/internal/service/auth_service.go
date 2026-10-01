@@ -64,7 +64,7 @@ type JWTClaims struct {
 	TokenVersion int64  `json:"token_version"` // Used to invalidate tokens on password change
 	// SessionID 会话 ID（与 refresh token family 对应），用于单会话撤销与 step-up 授权绑定。
 	SessionID string `json:"sid,omitempty"`
-	// BindingHash 会话指纹哈希（IP+UA），会话绑定开启时校验；空值表示旧 token（平滑升级）。
+	// BindingHash 会话指纹哈希（UA），会话绑定开启时校验；空值或旧版 IP+UA 指纹兼容放行。
 	BindingHash string `json:"bnd,omitempty"`
 	jwt.RegisteredClaims
 }
@@ -1407,7 +1407,7 @@ func isReservedEmail(email string) bool {
 
 // GenerateToken 生成JWT access token
 // 使用新的access_token_expire_minutes配置项（如果配置了），否则回退到expire_hour。
-// 会话指纹（IP/UA）从 ctx 中提取（由 HTTP 入口中间件注入），缺失时生成不带绑定的 token。
+// 会话指纹（UA）从 ctx 中提取（由 HTTP 入口中间件注入），缺失时生成不带绑定的 token。
 func (s *AuthService) GenerateToken(ctx context.Context, user *User) (string, error) {
 	sessionID, err := randomHexString(8)
 	if err != nil {
@@ -1505,7 +1505,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, oldTokenString string) (
 
 	// 会话绑定检查：指纹变化的旧 token 不允许换发新 token。
 	if s.settingService != nil && s.settingService.IsSessionBindingEnabled(ctx) && claims.BindingHash != "" {
-		if current := sessionBindingHashFromContext(ctx); current != "" && current != claims.BindingHash {
+		if !SessionBindingFromContext(ctx).MatchesHash(claims.BindingHash) {
 			_ = s.RevokeSessionFamily(ctx, claims.SessionID)
 			return "", ErrSessionBindingMismatch
 		}
@@ -1834,10 +1834,10 @@ func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string)
 		return nil, ErrTokenRevoked
 	}
 
-	// 会话绑定检查：IP/UA 任一变化即撤销整个会话家族。
-	// data.BindingHash 为空表示功能开启前签发的旧会话，放行并在轮转时补齐绑定。
+	// 会话绑定检查：User-Agent 变化即撤销整个会话家族，IP 变化不影响刷新。
+	// 空指纹及旧版 IP+UA 指纹兼容放行，并在轮转时更新为 UA 绑定。
 	if s.settingService != nil && s.settingService.IsSessionBindingEnabled(ctx) && data.BindingHash != "" {
-		if current := sessionBindingHashFromContext(ctx); current != "" && current != data.BindingHash {
+		if !SessionBindingFromContext(ctx).MatchesHash(data.BindingHash) {
 			_ = s.refreshTokenCache.DeleteTokenFamily(ctx, data.FamilyID)
 			logger.LegacyPrintf("service.auth", "[Auth] Session binding mismatch on refresh for user %d, family revoked", data.UserID)
 			return nil, ErrSessionBindingMismatch

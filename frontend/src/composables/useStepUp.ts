@@ -1,16 +1,9 @@
 /**
- * Step-up (sudo) 2FA composable.
+ * Legacy step-up (sudo) 2FA composable.
  *
- * Wraps a sensitive admin action so that when the backend responds with a
- * STEP_UP_REQUIRED error, the caller can prompt for a TOTP code, obtain a
- * short-lived grant, and transparently retry the original action.
- *
- * Usage in a view:
- *   const stepUp = useStepUp()
- *   async function exportData() {
- *     await stepUp.run(() => adminAPI.accounts.exportData(...))
- *   }
- *   // template: <TotpStepUpDialog :controller="stepUp" />
+ * Kept for compatibility with older integrations that may still receive a
+ * STEP_UP_REQUIRED response. Current sensitive-operation flows do not invoke
+ * this wrapper, so TOTP remains optional.
  */
 import { ref } from 'vue'
 

@@ -120,6 +120,25 @@
         </div>
       </div>
 
+      <OpenAIAutoReauthSettings
+        v-if="isOpenAIOAuth"
+        v-model:enabled="openaiAutoReauth.state.enabled"
+        v-model:login-credentials="openaiAutoReauth.state.loginCredentials"
+        :configured="openaiAutoReauth.state.configured"
+        :status="account.extra?.openai_auto_reauth"
+        :disabled="currentLoading"
+      />
+      <button
+        v-if="isOpenAIOAuth"
+        type="button"
+        class="btn btn-secondary w-full"
+        :disabled="currentLoading"
+        data-testid="save-openai-auto-reauth"
+        @click="handleSaveAutoReauth"
+      >
+        {{ t('admin.accounts.openai.autoReauth.saveOnly') }}
+      </button>
+
       <OAuthAuthorizationFlow
         ref="oauthFlowRef"
         :add-method="addMethod"
@@ -207,6 +226,8 @@ import type { Account } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OAuthAuthorizationFlow from '@/components/account/OAuthAuthorizationFlow.vue'
+import OpenAIAutoReauthSettings from '@/components/account/OpenAIAutoReauthSettings.vue'
+import { useOpenAIAutoReauth } from '@/components/account/openaiAutoReauth'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -248,7 +269,37 @@ const addMethod = ref<AddMethod>('oauth')
 const geminiOAuthType = ref<'code_assist' | 'google_one' | 'ai_studio'>('code_assist')
 
 // Computed - check platform
+const openaiAutoReauth = useOpenAIAutoReauth()
+const savingAutoReauth = ref(false)
 const isOpenAI = computed(() => props.account?.platform === 'openai')
+const isOpenAIOAuth = computed(() => isOpenAI.value && props.account?.type === 'oauth' && !props.account.parent_account_id)
+watch(() => [props.show, props.account] as const, ([show, account]) => {
+  openaiAutoReauth.reset(show ? account?.credentials : undefined)
+}, { immediate: true })
+
+const validateOpenAIAutoReauth = () => {
+  if (!isOpenAIOAuth.value) return true
+  const error = openaiAutoReauth.validationError()
+  if (error) appStore.showError(t(error))
+  return !error
+}
+
+const handleSaveAutoReauth = async () => {
+  if (!props.account || !isOpenAIOAuth.value || currentLoading.value || !validateOpenAIAutoReauth()) return
+  const credentials: Record<string, unknown> = {}
+  openaiAutoReauth.apply(credentials)
+  savingAutoReauth.value = true
+  try {
+    const account = await adminAPI.accounts.update(props.account.id, { credentials })
+    appStore.showSuccess(t('admin.accounts.openai.autoReauth.saved'))
+    emit('reauthorized', account)
+    handleClose()
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || error.message || t('admin.accounts.failedToUpdate'))
+  } finally {
+    savingAutoReauth.value = false
+  }
+}
 const isOpenAILike = computed(() => isOpenAI.value)
 const isGemini = computed(() => props.account?.platform === 'gemini')
 const isAnthropic = computed(() => props.account?.platform === 'anthropic')
@@ -286,6 +337,7 @@ const currentSessionId = computed(() => {
   return claudeOAuth.sessionId.value
 })
 const currentLoading = computed(() => {
+  if (savingAutoReauth.value) return true
   if (isOpenAILike.value) return openaiOAuth.loading.value
   if (isGemini.value) return geminiOAuth.loading.value
   if (isAntigravity.value) return antigravityOAuth.loading.value
@@ -363,6 +415,7 @@ const resetState = () => {
 }
 
 const handleClose = () => {
+  openaiAutoReauth.reset()
   emit('close')
 }
 
@@ -386,7 +439,7 @@ const handleGenerateUrl = async () => {
 }
 
 const handleExchangeCode = async () => {
-  if (!props.account) return
+  if (!props.account || !validateOpenAIAutoReauth()) return
 
   const authCode = oauthFlowRef.value?.authCode || ''
   if (!authCode.trim()) return
@@ -413,6 +466,7 @@ const handleExchangeCode = async () => {
 
     // Build credentials and extra info
     const credentials = oauthClient.buildCredentials(tokenInfo)
+    if (isOpenAIOAuth.value) openaiAutoReauth.apply(credentials)
     const extra = oauthClient.buildExtraInfo(tokenInfo)
 
     try {
@@ -641,15 +695,18 @@ const handleValidateRefreshToken = async (refreshTokenInput: string) => {
   if (!refreshToken) return
 
   if (isOpenAILike.value) {
+    if (!validateOpenAIAutoReauth()) return
     openaiOAuth.loading.value = true
     openaiOAuth.error.value = ''
     try {
       const tokenInfo = await openaiOAuth.validateRefreshToken(refreshToken, props.account.proxy_id)
       if (!tokenInfo) return
 
+      const credentials = openaiOAuth.buildCredentials(tokenInfo)
+      if (isOpenAIOAuth.value) openaiAutoReauth.apply(credentials)
       const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
         type: 'oauth',
-        credentials: openaiOAuth.buildCredentials(tokenInfo),
+        credentials,
         extra: openaiOAuth.buildExtraInfo(tokenInfo)
       })
       appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))

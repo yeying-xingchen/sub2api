@@ -108,6 +108,11 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 	}
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
+	if statusCode == http.StatusUnauthorized && s != nil && s.rateLimitService != nil && s.rateLimitService.tryOpenAIAutoReauth(stateCtx, account) {
+		// The database claim owns the recovery pause. A handled stale 401 or
+		// shadow response must not add a separate local scheduling block.
+		return true
+	}
 	if account != nil && account.Platform == PlatformOpenAI && isOpenAIHTTPUpstreamAccessStateError(statusCode, "", responseBody) {
 		message := "OpenAI upstream account or workspace is unavailable"
 		if upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(responseBody)); upstreamMsg != "" {

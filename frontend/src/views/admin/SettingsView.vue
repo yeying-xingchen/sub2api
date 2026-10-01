@@ -1703,22 +1703,7 @@
                 </div>
               </div>
 
-              <!-- 敏感操作 step-up 2FA -->
-              <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
-              >
-                <div>
-                  <label class="font-medium text-gray-900 dark:text-white">{{
-                    t("admin.settings.security.stepUp")
-                  }}</label>
-                  <p class="text-sm text-gray-500 dark:text-gray-400">
-                    {{ t("admin.settings.security.stepUpHint") }}
-                  </p>
-                </div>
-                <Toggle v-model="form.step_up_enabled" />
-              </div>
-
-              <!-- 会话 IP/UA 绑定 -->
+              <!-- 会话 User-Agent 绑定 -->
               <div
                 class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
               >
@@ -1731,6 +1716,41 @@
                   </p>
                 </div>
                 <Toggle v-model="form.session_binding_enabled" />
+              </div>
+
+              <div
+                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+              >
+                <div class="flex items-center justify-between">
+                  <div>
+                    <label class="font-medium text-gray-900 dark:text-white">{{
+                      t("admin.settings.security.globalTurnState")
+                    }}</label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.security.globalTurnStateHint") }}
+                    </p>
+                  </div>
+                  <Toggle v-model="form.openai_global_turn_state_enabled" />
+                </div>
+                <div class="mt-3 flex flex-wrap items-center gap-3">
+                  <label class="text-sm text-gray-600 dark:text-gray-300">
+                    {{ t("admin.settings.security.globalTurnStateAccountID") }}
+                  </label>
+                  <input
+                    v-model.number="form.openai_global_turn_state_account_id"
+                    type="number"
+                    min="1"
+                    class="input w-48"
+                    :placeholder="t('admin.settings.security.globalTurnStateAccountPlaceholder')"
+                  />
+                  <span class="text-sm text-gray-500 dark:text-gray-400">
+                    {{
+                      form.openai_global_turn_state_configured
+                        ? t("admin.settings.security.globalTurnStateConfigured", { time: form.openai_global_turn_state_updated_at || "-" })
+                        : t("admin.settings.security.globalTurnStateNotConfigured")
+                    }}
+                  </span>
+                </div>
               </div>
 
               <!-- 审计日志保留天数 -->
@@ -8960,8 +8980,6 @@
         @confirm="handleAffiliateConfirm"
         @cancel="cancelAffiliateConfirm"
       />
-      <!-- 关闭 step-up 开关等敏感保存操作触发的 TOTP 二次验证 -->
-      <TotpStepUpDialog :controller="settingsStepUp" />
     </div>
   </AppLayout>
 </template>
@@ -9025,13 +9043,6 @@ import BackupSettings from "@/views/admin/BackupView.vue";
 import EmailTemplateEditor from "@/views/admin/settings/EmailTemplateEditor.vue";
 import OpenAIFastPolicyUserSelector from "@/views/admin/settings/OpenAIFastPolicyUserSelector.vue";
 import { useClipboard } from "@/composables/useClipboard";
-import {
-  useStepUp,
-  isStepUpCancelled,
-  isStepUpBlocked,
-  stepUpBlockReason,
-} from "@/composables/useStepUp";
-import TotpStepUpDialog from "@/components/auth/TotpStepUpDialog.vue";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
 import { useAppStore } from "@/stores";
@@ -9052,8 +9063,7 @@ import {
 
 const { t, locale } = useI18n();
 const appStore = useAppStore();
-// 关闭 step-up 开关是敏感操作：后端返回 STEP_UP_REQUIRED 时弹 TOTP 码重试
-const settingsStepUp = useStepUp();
+// 系统设置直接保存；TOTP 仍可在个人资料中按需启用。
 const adminSettingsStore = useAdminSettingsStore();
 const isZhLocale = computed(() => locale.value.startsWith("zh"));
 
@@ -9755,13 +9765,17 @@ const form = reactive<SettingsForm>({
   invitation_code_enabled: false,
   password_reset_enabled: false,
   totp_enabled: false,
+  step_up_enabled: false,
   totp_encryption_key_configured: false,
   passkey_enabled: false,
   passkey_configured: false,
   passkey_rp_id: "",
   passkey_rp_origins: [],
   session_binding_enabled: false,
-  step_up_enabled: false,
+  openai_global_turn_state_enabled: false,
+  openai_global_turn_state_account_id: 0,
+  openai_global_turn_state_configured: false,
+  openai_global_turn_state_updated_at: "",
   audit_log_retention_days: 180,
   login_agreement_enabled: false,
   login_agreement_mode: "modal",
@@ -11452,8 +11466,10 @@ async function saveSettings() {
       password_reset_enabled: form.password_reset_enabled,
       totp_enabled: form.totp_enabled,
       passkey_enabled: form.passkey_enabled,
+      openai_global_turn_state_enabled: form.openai_global_turn_state_enabled,
+      openai_global_turn_state_account_id: Number(form.openai_global_turn_state_account_id) || 0,
       session_binding_enabled: form.session_binding_enabled,
-      step_up_enabled: form.step_up_enabled,
+
       // 清空数字框时 v-model.number 会得到空串，后端 int 字段解析空串会 400 拒绝整次保存；
       // 空/非法值回退默认 180（与后端 parseAuditLogRetentionDays("") 语义一致，0 仍表示永久保留）。
       audit_log_retention_days: Number.isFinite(form.audit_log_retention_days)
@@ -11800,9 +11816,7 @@ async function saveSettings() {
     );
     appendAuthSourceDefaultsToUpdateRequest(payload, authSourceDefaults);
 
-    const updated = await settingsStepUp.run(() =>
-      adminAPI.settings.updateSettings(payload),
-    );
+    const updated = await adminAPI.settings.updateSettings(payload)
     for (const [key, value] of Object.entries(updated)) {
       if (key === "openai_fast_policy_settings") continue;
       if (value !== null && value !== undefined) {
@@ -11887,25 +11901,6 @@ async function saveSettings() {
       appStore.showSuccess(t("admin.settings.settingsSaved"));
     }
   } catch (error: unknown) {
-    // 用户取消 step-up 验证：静默返回，不弹错误
-    if (isStepUpCancelled(error)) {
-      return;
-    }
-    if (isStepUpBlocked(error)) {
-      appStore.showError(
-        stepUpBlockReason(error) === "STEP_UP_ADMIN_API_KEY_FORBIDDEN"
-          ? t("stepUp.adminApiKeyForbidden")
-          : t("stepUp.notEnabled"),
-      );
-      return;
-    }
-    // 开启 step-up 开关但本人未启用 2FA：给出可操作的专用提示
-    if (
-      (error as { reason?: string })?.reason === "STEP_UP_ENABLE_REQUIRES_TOTP"
-    ) {
-      appStore.showError(t("admin.settings.security.stepUpEnableRequiresTotp"));
-      return;
-    }
     appStore.showError(
       extractApiErrorMessage(error, t("admin.settings.failedToSave")),
     );

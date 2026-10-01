@@ -9,14 +9,12 @@ const {
   enablePlugin,
   savePluginConfig,
   createUISession,
-  stepUpRun,
 } = vi.hoisted(() => ({
   listPlugins: vi.fn(),
   uploadPlugin: vi.fn(),
   enablePlugin: vi.fn(),
   savePluginConfig: vi.fn(),
   createUISession: vi.fn(),
-  stepUpRun: vi.fn((action: () => Promise<unknown>) => action()),
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -41,13 +39,6 @@ vi.mock('@/stores', () => ({
     showSuccess: vi.fn(),
     showInfo: vi.fn(),
   }),
-}))
-
-vi.mock('@/composables/useStepUp', () => ({
-  useStepUp: () => ({ run: stepUpRun }),
-  isStepUpBlocked: () => false,
-  isStepUpCancelled: () => false,
-  stepUpBlockReason: () => '',
 }))
 
 vi.mock('vue-i18n', async (importOriginal) => ({
@@ -116,16 +107,14 @@ function mountView() {
         AppLayout: { template: '<div><slot /></div>' },
         BaseDialog: { template: '<div><slot /></div>' },
         Icon: true,
-        TotpStepUpDialog: true,
       },
     },
   })
 }
 
-describe('管理员插件页二次验证', () => {
+describe('管理员插件页操作', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    stepUpRun.mockImplementation((action: () => Promise<unknown>) => action())
     listPlugins.mockResolvedValue([plugin])
     uploadPlugin.mockResolvedValue(plugin)
     enablePlugin.mockResolvedValue(plugin)
@@ -138,7 +127,7 @@ describe('管理员插件页二次验证', () => {
     })
   })
 
-  it('启用插件通过 step-up 控制器执行', async () => {
+  it('启用插件直接调用 API', async () => {
     const wrapper = mountView()
     await flushPromises()
 
@@ -147,11 +136,10 @@ describe('管理员插件页二次验证', () => {
     await button!.trigger('click')
     await flushPromises()
 
-    expect(stepUpRun).toHaveBeenCalledTimes(1)
     expect(enablePlugin).toHaveBeenCalledWith(7, 100, false)
   })
 
-  it('上传插件通过 step-up 控制器执行', async () => {
+  it('上传插件直接调用 API', async () => {
     const wrapper = mountView()
     await flushPromises()
     const input = wrapper.get('input[type="file"]')
@@ -163,7 +151,6 @@ describe('管理员插件页二次验证', () => {
     await input.trigger('change')
     await flushPromises()
 
-    expect(stepUpRun).toHaveBeenCalledTimes(1)
     expect(uploadPlugin).toHaveBeenCalledTimes(1)
   })
 })

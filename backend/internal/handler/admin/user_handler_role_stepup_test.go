@@ -46,11 +46,11 @@ func doJSON(t *testing.T, router *gin.Engine, method, path string, payload map[s
 	return rec
 }
 
-func TestUpdateUserPromoteToAdminRequiresStepUp(t *testing.T) {
+func TestUpdateUserPromoteToAdminDoesNotRequireStepUp(t *testing.T) {
 	router, _ := setupRoleStepUpRouter(t)
 
 	rec := doJSON(t, router, http.MethodPut, "/api/v1/admin/users/1", map[string]any{"role": "admin"})
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestUpdateUserKeepAdminRoleSkipsStepUp(t *testing.T) {
@@ -67,13 +67,13 @@ func TestUpdateUserRegularRoleSkipsStepUp(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
-func TestCreateAdminUserRequiresStepUp(t *testing.T) {
+func TestCreateAdminUserDoesNotRequireStepUp(t *testing.T) {
 	router, _ := setupRoleStepUpRouter(t)
 
 	rec := doJSON(t, router, http.MethodPost, "/api/v1/admin/users", map[string]any{
 		"email": "new-admin@example.com", "password": "pass123", "role": "admin",
 	})
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestCreateRegularUserSkipsStepUp(t *testing.T) {

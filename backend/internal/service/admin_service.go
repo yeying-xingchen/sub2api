@@ -690,6 +690,7 @@ type adminServiceImpl struct {
 	emptyGroupDeleteRepo EmptyGroupDeleteRepository
 	accountRepo          AccountRepository
 	accountDuplicateRepo AccountDuplicateRepository
+	accountEncryptor     SecretEncryptor
 	accountBillingRepo   AccountBillingSettingsRepository
 	proxyRepo            ProxyRepository
 	apiKeyRepo           APIKeyRepository
@@ -752,6 +753,7 @@ func NewAdminService(
 	compositeRouteRepo CompositeModelRouteRepository,
 	compositeResolver *CompositeRouteResolver,
 	channelCacheInvalidator ChannelCacheInvalidator,
+	accountEncryptor SecretEncryptor,
 ) AdminService {
 	return &adminServiceImpl{
 		cfg:                  cfg,
@@ -761,6 +763,7 @@ func NewAdminService(
 		emptyGroupDeleteRepo: groupRepo,
 		accountRepo:          accountRepo,
 		accountDuplicateRepo: accountRepo,
+		accountEncryptor:     accountEncryptor,
 		accountBillingRepo:   accountRepo,
 		proxyRepo:            proxyRepo,
 		apiKeyRepo:           apiKeyRepo,

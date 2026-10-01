@@ -1,4 +1,4 @@
-import type { AccountPlatform, GroupPlatform } from '@/types'
+import type { AccountPlatform, AccountType, GroupPlatform } from '@/types'
 
 export interface PlatformOption<T extends string = string> {
   value: T
@@ -28,3 +28,13 @@ export const GROUP_PLATFORM_OPTIONS = [
   ...CONCRETE_PLATFORM_OPTIONS,
   { value: 'composite', label: 'Composite' }
 ] as const satisfies readonly PlatformOption<GroupPlatform>[]
+
+/** Authentication and connection types supported by account records. */
+export const ACCOUNT_TYPE_OPTIONS = [
+  { value: 'oauth', labelKey: 'admin.accounts.types.oauth' },
+  { value: 'setup-token', labelKey: 'admin.accounts.types.setupToken' },
+  { value: 'apikey', labelKey: 'admin.accounts.types.apiKey' },
+  { value: 'upstream', labelKey: 'admin.accounts.types.upstream' },
+  { value: 'bedrock', labelKey: 'admin.accounts.types.bedrock' },
+  { value: 'service_account', labelKey: 'admin.accounts.types.serviceAccount' }
+] as const satisfies ReadonlyArray<{ value: AccountType; labelKey: string }>

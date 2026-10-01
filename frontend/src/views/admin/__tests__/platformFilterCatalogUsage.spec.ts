@@ -19,6 +19,11 @@ describe('admin platform filters', () => {
     expect(source).toContain('...CONCRETE_PLATFORM_OPTIONS')
   })
 
+  it('uses the shared account type catalog on the accounts page', () => {
+    const source = readSource('src/components/admin/account/AccountTableFilters.vue')
+    expect(source).toContain("import { ACCOUNT_TYPE_OPTIONS, CONCRETE_PLATFORM_OPTIONS } from '@/constants/platforms'")
+    expect(source).toContain('...ACCOUNT_TYPE_OPTIONS.map')
+  })
   it('uses the concrete platform catalog wherever concrete platforms are selected', () => {
     for (const path of [
       'src/components/admin/account/AccountTableFilters.vue',
@@ -26,7 +31,11 @@ describe('admin platform filters', () => {
       'src/views/admin/ops/components/OpsDashboardHeader.vue'
     ]) {
       const source = readSource(path)
-      expect(source).toContain("import { CONCRETE_PLATFORM_OPTIONS } from '@/constants/platforms'")
+      if (path === 'src/components/admin/account/AccountTableFilters.vue') {
+        expect(source).toContain('CONCRETE_PLATFORM_OPTIONS')
+      } else {
+        expect(source).toContain("import { CONCRETE_PLATFORM_OPTIONS } from '@/constants/platforms'")
+      }
       expect(source).toMatch(/platformOptions\s*=.*CONCRETE_PLATFORM_OPTIONS|pOpts.*\.\.\.CONCRETE_PLATFORM_OPTIONS/s)
     }
   })

@@ -712,3 +712,76 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(createOpenAICodexPATMock.mock.calls[0]?.[0]?.extra?.openai_long_context_billing_enabled).toBe(false)
   })
 })
+
+
+describe('CreateAccountModal OpenAI automatic reauthorization', () => {
+  const raw = 'person@example.com---- p@ss word ----JBSWY3DPEHPK3PXP'
+
+  beforeEach(() => {
+    authIsSimpleMode.value = true
+    createAccountMock.mockReset()
+    createOpenAICodexPATMock.mockReset().mockResolvedValue({})
+    importCodexSessionMock.mockReset().mockResolvedValue({ created: 1, updated: 0, skipped: 0, failed: 0 })
+  })
+
+  it('adds the raw login settings to token import without bypassing token authorization', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Auto reauth')
+    await wrapper.get('[data-testid="openai-login-credentials"]').setValue(raw)
+    await wrapper.get('[data-testid="openai-auto-reauth-toggle"]').trigger('click')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    expect(createAccountMock).not.toHaveBeenCalled()
+    expect(createOpenAICodexPATMock).not.toHaveBeenCalled()
+    expect(wrapper.get<HTMLInputElement>('[data-testid="openai-login-credentials"]').element.value).toBe(raw)
+    await wrapper.get('[data-testid="import-codex-pat"]').trigger('click')
+    await flushPromises()
+    expect(createOpenAICodexPATMock.mock.calls[0]?.[0]).toMatchObject({
+      access_token: 'pat-token',
+      credential_extras: { openai_auto_reauth_enabled: true, openai_login_credentials: raw }
+    })
+    wrapper.unmount()
+  })
+
+  it('can store credentials while automatic reauthorization is off', async () => {
+    const wrapper = await openCodexImportStep()
+    await wrapper.get('[data-testid="openai-login-credentials"]').setValue(raw)
+    await wrapper.get('[data-testid="import-codex-session"]').trigger('click')
+    await flushPromises()
+    expect(importCodexSessionMock.mock.calls[0]?.[0]?.credential_extras).toMatchObject({
+      openai_auto_reauth_enabled: false,
+      openai_login_credentials: raw
+    })
+    wrapper.unmount()
+  })
+
+  it('rejects temporary 2FA codes before advancing to token authorization', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Auto reauth')
+    await wrapper.get('[data-testid="openai-login-credentials"]').setValue('person@example.com----password----123456')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    expect(wrapper.find('form#create-account-form').exists()).toBe(true)
+    expect(createAccountMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('hides settings for other platforms and OpenAI API keys', async () => {
+    const wrapper = mountModal()
+    expect(wrapper.find('[data-testid="openai-auto-reauth-settings"]').exists()).toBe(false)
+    await selectButtonByText(wrapper, 'OpenAI')
+    expect(wrapper.find('[data-testid="openai-auto-reauth-settings"]').exists()).toBe(true)
+    await selectButtonByText(wrapper, 'API Key')
+    expect(wrapper.find('[data-testid="openai-auto-reauth-settings"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('does not copy one login identity onto a batch import', async () => {
+    const wrapper = await openCodexImportStep()
+    await wrapper.get('[data-testid="openai-login-credentials"]').setValue(raw)
+    wrapper.getComponent(OAuthAuthorizationFlowStub).vm.$emit('import-codex-session', '[{}, {}]')
+    await flushPromises()
+    expect(importCodexSessionMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})

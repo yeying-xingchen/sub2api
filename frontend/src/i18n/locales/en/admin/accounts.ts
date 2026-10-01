@@ -201,6 +201,11 @@ export default {
       },
       types: {
         oauth: 'OAuth',
+        setupToken: 'Setup Token',
+        apiKey: 'API Key',
+        upstream: 'Upstream',
+        bedrock: 'AWS Bedrock',
+        serviceAccount: 'Service Account',
         chatgptOauth: 'ChatGPT OAuth',
         responsesApi: 'Responses API',
         googleOauth: 'Google OAuth',
@@ -208,7 +213,6 @@ export default {
         antigravityOauth: 'Antigravity OAuth',
         grokOauth: 'Grok OAuth',
         antigravityApikey: 'Connect via Base URL + API Key',
-        upstream: 'Upstream',
         upstreamDesc: 'Connect via Base URL + API Key'
       },
       antigravityProjectIdLabel: 'GCP Project ID (optional)',
@@ -614,6 +618,23 @@ export default {
       },
       // OpenAI specific hints
       openai: {
+        autoReauth: {
+          title: 'Automatically reauthorize on 401',
+          description: 'Sign in again with the saved OpenAI email, password and 2FA secret when the upstream returns 401.',
+          credentialsLabel: 'Upstream account login credentials',
+          placeholder: 'email----password----2FA',
+          secretHint: 'Use a long-lived Base32 secret or otpauth://totp/ URI for 2FA, never a 6-digit one-time code.',
+          configured: 'Login credentials are saved. Leave blank to keep them, or enter a replacement. Saved credentials are never displayed.',
+          retainHint: 'Turning automatic reauthorization off keeps the saved login credentials.',
+          createHint: 'This is an additional setting. Account creation still requires the existing token authorization. For batch imports, create the accounts first, then edit their login credentials individually.',
+          saveOnly: 'Save automatic reauthorization settings only',
+          saved: 'Automatic reauthorization settings saved',
+          required: 'Enter the email, password and long-lived 2FA secret before enabling automatic reauthorization.',
+          invalidFormat: 'Enter one complete line in email----password----2FA format.',
+          invalidSecret: '2FA must be a valid long-lived Base32 secret or an otpauth://totp/ URI containing it, never a 6-digit code.',
+          singleAccountOnly: 'One login credential line can only be used for one account. Import one account or edit each account after a batch import.',
+          status: { running: 'Automatic reauthorization is running', succeeded: 'Last automatic reauthorization succeeded', failed: 'Last automatic reauthorization failed' }
+        },
         baseUrlHint: 'Leave default for official OpenAI API',
         apiKeyHint: 'Your OpenAI API Key',
         oauthPassthrough: 'Auto passthrough (auth only)',

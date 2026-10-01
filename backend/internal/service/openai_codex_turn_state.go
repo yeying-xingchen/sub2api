@@ -55,6 +55,7 @@ func (s *OpenAIGatewayService) relayOpenAICodexTurnState(c *gin.Context, account
 		c.Writer.Header().Del(canonical)
 		return
 	}
+	s.maybePersistGlobalTurnState(account, upstream)
 	c.Writer.Header().Set(canonical, state)
 	s.noteOpenAICodexTurnStateProvenance(c, account)
 }
@@ -89,6 +90,7 @@ func (s *OpenAIGatewayService) noteStagedOpenAICodexTurnStateCommitted(c *gin.Co
 	if staged == nil || strings.TrimSpace(staged.Get(openAICodexTurnStateHeader)) == "" {
 		return
 	}
+	s.maybePersistGlobalTurnState(account, staged)
 	s.noteOpenAICodexTurnStateProvenance(c, account)
 }
 
@@ -116,9 +118,8 @@ func (s *OpenAIGatewayService) noteOpenAICodexTurnStateProvenance(c *gin.Context
 }
 
 // guardOpenAICodexTurnStateEcho 出站守卫：客户端回带的 turn-state 若已知由
-// 其他账号铸造则剥离，同账号或无溯源记录时保持原样。只剥离、不注入——
-// /responses 路径的客户端是真实 Codex，会按自身回合语义自行回带；服务端
-// 注入是 Claude 兼容桥（无法回带的客户端）的专属行为。
+// 其他账号铸造则剥离，同账号或无溯源记录时保持原样。全站 turn-state 是独立的显式配置覆写，
+// 由各请求构建器在账号级请求头处理之后应用。
 func (s *OpenAIGatewayService) guardOpenAICodexTurnStateEcho(c *gin.Context, account *Account, h http.Header) {
 	if s == nil || h == nil || account == nil {
 		return

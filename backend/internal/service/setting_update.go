@@ -177,6 +177,20 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyTotpEnabled] = strconv.FormatBool(settings.TotpEnabled)
 	updates[SettingKeyPasskeyEnabled] = strconv.FormatBool(settings.PasskeyEnabled)
 	updates[SettingKeySessionBindingEnabled] = strconv.FormatBool(settings.SessionBindingEnabled)
+	updates[SettingKeyOpenAIGlobalTurnStateEnabled] = strconv.FormatBool(settings.OpenAIGlobalTurnStateEnabled)
+	globalTurnStateAccountID := settings.OpenAIGlobalTurnStateAccountID
+	if globalTurnStateAccountID < 0 {
+		globalTurnStateAccountID = 0
+	}
+	updates[SettingKeyOpenAIGlobalTurnStateAccountID] = strconv.FormatInt(globalTurnStateAccountID, 10)
+	// The opaque state and its timestamp are owned by the refresh worker; retain them when settings are saved.
+	updates[SettingKeyOpenAIGlobalTurnState] = strings.TrimSpace(settings.OpenAIGlobalTurnState)
+	updates[SettingKeyOpenAIGlobalTurnStateUpdatedAt] = strings.TrimSpace(settings.OpenAIGlobalTurnStateUpdatedAt)
+	stateSourceID := int64(0)
+	if strings.TrimSpace(settings.OpenAIGlobalTurnState) != "" {
+		stateSourceID = globalTurnStateAccountID
+	}
+	updates[SettingKeyOpenAIGlobalTurnStateSourceAccountID] = strconv.FormatInt(stateSourceID, 10)
 	updates[SettingKeyStepUpEnabled] = strconv.FormatBool(settings.StepUpEnabled)
 	updates[SettingKeyAuditLogRetentionDays] = strconv.Itoa(settings.AuditLogRetentionDays)
 	settings.LoginAgreementMode = normalizeLoginAgreementMode(settings.LoginAgreementMode)

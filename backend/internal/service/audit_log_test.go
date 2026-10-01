@@ -161,10 +161,10 @@ func TestSessionBindingHash(t *testing.T) {
 		t.Fatalf("non-empty binding must produce non-empty hash")
 	}
 
-	// IP 变化 → 哈希变化。
+	// IP 变化不影响会话指纹。
 	c := &SessionBinding{IP: "5.6.7.8", UserAgent: "Mozilla/5.0"}
-	if a.Hash() == c.Hash() {
-		t.Fatalf("changing IP must change hash")
+	if a.Hash() != c.Hash() {
+		t.Fatalf("changing IP must not change hash")
 	}
 	// UA 变化 → 哈希变化。
 	d := &SessionBinding{IP: "1.2.3.4", UserAgent: "curl/8.0"}

@@ -11,8 +11,8 @@ import (
 )
 
 // SessionBindingContext 全局中间件：将请求的客户端 IP 与 User-Agent 注入
-// request context，供 token 签发路径（登录 / 刷新 / OAuth 回调）读取并写入会话绑定，
-// 同时作为审计日志、会话绑定校验的统一客户端 IP 来源。
+// request context，供 token 签发路径（登录 / 刷新 / OAuth 回调）读取 User-Agent 绑定，
+// 同时作为审计日志的统一客户端 IP 来源。
 // IP 取值与 API Key IP 限制共用转发 IP 开关：开启时旧版原始转发头逻辑
 // 接管解析，关闭时使用 Gin 的 server.trusted_proxies 可信代理链。
 func SessionBindingContext(cfg *config.Config) gin.HandlerFunc {
@@ -43,7 +43,7 @@ func requestSessionBinding(c *gin.Context) *service.SessionBinding {
 }
 
 // SecurityClientIP 返回当前请求用于安全敏感记录（审计日志等）的客户端 IP。
-// 与会话绑定、API Key IP 限制共用同一套客户端 IP 来源。
+// 与 API Key IP 限制共用同一套客户端 IP 来源。
 func SecurityClientIP(c *gin.Context) string {
 	if binding := service.SessionBindingFromContext(c.Request.Context()); binding != nil &&
 		strings.TrimSpace(binding.IP) != "" {
@@ -52,12 +52,12 @@ func SecurityClientIP(c *gin.Context) string {
 	return ip.GetTrustedClientIP(c)
 }
 
-// enforceSessionBinding 校验 access token 的会话指纹（IP/UA 绑定）。
+// enforceSessionBinding 校验 access token 的会话指纹（User-Agent 绑定）。
 // 指纹不匹配时：撤销该会话家族的所有 refresh token、写入审计安全事件、返回 401。
 // 返回 false 表示请求已被中断。
 //
-// 兼容性：claims.BindingHash 为空（功能上线前签发的旧 token）时放行，
-// 该会话在下一次 refresh 轮转时会自动获得绑定。
+// 兼容性：claims.BindingHash 为空或旧版 IP+UA 指纹时放行，
+// 该会话在下一次 refresh 轮转时会自动获得 UA 绑定。
 func enforceSessionBinding(
 	c *gin.Context,
 	authService *service.AuthService,
@@ -72,8 +72,7 @@ func enforceSessionBinding(
 		return true
 	}
 	binding := requestSessionBinding(c)
-	current := binding.Hash()
-	if current == "" || current == claims.BindingHash {
+	if binding.MatchesHash(claims.BindingHash) {
 		return true
 	}
 
@@ -99,6 +98,6 @@ func enforceSessionBinding(
 			StatusCode:  401,
 		})
 	}
-	AbortWithError(c, 401, "SESSION_BINDING_MISMATCH", "Session network fingerprint changed, please login again")
+	AbortWithError(c, 401, "SESSION_BINDING_MISMATCH", "Session user agent changed, please login again")
 	return false
 }

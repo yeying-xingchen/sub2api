@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// StepUpAuthMiddleware 敏感操作 step-up 2FA 门控中间件类型。
+// StepUpAuthMiddleware 保留为兼容类型；敏感操作不再强制要求 step-up 2FA。
 type StepUpAuthMiddleware gin.HandlerFunc
 
 // stepUpGrantChecker 抽象 TOTP step-up 授权检查能力（由 TotpService 实现）。
@@ -36,15 +36,7 @@ func StepUpSessionKey(c *gin.Context, userID int64) string {
 	return fmt.Sprintf("u%d", userID)
 }
 
-// NewStepUpAuthMiddleware 创建敏感操作 step-up 2FA 门控中间件。
-//
-// 功能开关 step_up_enabled（默认关闭）关闭时中间件直接放行，行为与门控引入前一致。
-// 开启时的通过条件（全部满足）：
-//  1. 必须是 JWT 认证的真人会话——admin API key（机器凭证）一律拒绝
-//  2. 当前用户已启用 TOTP（未启用则拒绝并提示先启用 2FA）
-//  3. 当前会话在有效期内完成过 TOTP step-up 验证（POST /api/v1/user/totp/step-up）
-//
-// 失败响应使用可区分的错误码，前端据此弹出 TOTP 验证对话框后重试。
+// NewStepUpAuthMiddleware 创建兼容的 step-up 中间件句柄；当前实现直接放行请求。
 func NewStepUpAuthMiddleware(
 	totpService *service.TotpService,
 	userService *service.UserService,
@@ -71,9 +63,7 @@ func stepUpAuth(grantChecker stepUpGrantChecker, userReader stepUpUserReader, se
 	}
 }
 
-// EnforceStepUp 对当前请求执行与 StepUpAuthMiddleware 相同语义的 step-up 门控，
-// 供 handler 在需要按请求内容条件触发时调用（如仅当把用户角色提升为管理员时）。
-// 校验失败时写入错误响应并中止请求，返回 false；通过返回 true。
+// EnforceStepUp 对当前请求保留兼容调用点；当前实现始终放行。
 func EnforceStepUp(
 	c *gin.Context,
 	totpService *service.TotpService,
@@ -83,9 +73,7 @@ func EnforceStepUp(
 	return enforceStepUp(c, totpService, userService, stepUpSettingsOrNil(settingService))
 }
 
-// EnforceStepUpAlways 与 EnforceStepUp 语义相同但不读取功能开关，无条件执行门控。
-// 供调用方已确知门控必须生效的场景使用（如"关闭 step-up 开关"本身：调用方刚从
-// 持久化设置读到开关为开启状态，不应依赖二次读取——读取失败会导致门控被跳过）。
+// EnforceStepUpAlways 保留为兼容 API，当前实现始终放行。
 func EnforceStepUpAlways(
 	c *gin.Context,
 	totpService *service.TotpService,
@@ -94,48 +82,14 @@ func EnforceStepUpAlways(
 	return enforceStepUp(c, totpService, userService, nil)
 }
 
-func enforceStepUp(c *gin.Context, grantChecker stepUpGrantChecker, userReader stepUpUserReader, settings stepUpSettingReader) bool {
-	// 功能开关关闭时直接放行（含 admin API key），恢复门控引入前的行为。
-	// settings 为 nil 时保持门控（fail-closed）：正常装配不会出现 nil。
-	if settings != nil && !settings.IsStepUpEnabled(c.Request.Context()) {
-		return true
-	}
-
-	if c.GetString("auth_method") == service.AuditAuthMethodAdminAPIKey {
-		AbortWithError(c, 403, "STEP_UP_ADMIN_API_KEY_FORBIDDEN",
-			"Admin API key cannot access this endpoint; a two-factor verified admin session is required")
-		return false
-	}
-
-	subject, ok := GetAuthSubjectFromContext(c)
-	if !ok || subject.UserID <= 0 {
-		AbortWithError(c, 401, "UNAUTHORIZED", "Authorization required")
-		return false
-	}
-
-	user, err := userReader.GetByID(c.Request.Context(), subject.UserID)
-	if err != nil {
-		AbortWithError(c, 500, "INTERNAL_ERROR", "Failed to load user")
-		return false
-	}
-	if !user.TotpEnabled {
-		AbortWithError(c, 403, "STEP_UP_TOTP_NOT_ENABLED",
-			"This operation requires two-factor authentication; please enable TOTP first")
-		return false
-	}
-
-	sessionKey := StepUpSessionKey(c, subject.UserID)
-	granted, err := grantChecker.HasStepUpGrant(c.Request.Context(), subject.UserID, sessionKey)
-	if err != nil {
-		// 安全门控故障时选择 fail-closed。
-		AbortWithError(c, 503, "STEP_UP_UNAVAILABLE", "Step-up verification service unavailable")
-		return false
-	}
-	if !granted {
-		AbortWithError(c, 403, "STEP_UP_REQUIRED",
-			"This operation requires recent two-factor verification")
-		return false
-	}
-
+// enforceStepUp is kept as a compatibility hook for routes and handlers that
+// were wired through the former step-up feature. Two-factor authentication is
+// optional, so sensitive operations must not be blocked by this hook.
+func enforceStepUp(
+	_ *gin.Context,
+	_ stepUpGrantChecker,
+	_ stepUpUserReader,
+	_ stepUpSettingReader,
+) bool {
 	return true
 }

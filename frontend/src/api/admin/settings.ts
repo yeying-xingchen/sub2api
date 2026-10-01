@@ -413,8 +413,12 @@ export interface SystemSettings {
   passkey_configured: boolean;
   passkey_rp_id: string;
   passkey_rp_origins: string[];
-  session_binding_enabled: boolean; // 会话 IP/UA 绑定
-  step_up_enabled: boolean; // 敏感操作 step-up 2FA
+  session_binding_enabled: boolean; // 会话 User-Agent 绑定（IP 变化不触发退出，User-Agent 变化需重新登录）
+  openai_global_turn_state_enabled: boolean;
+  openai_global_turn_state_account_id: number;
+  openai_global_turn_state_configured: boolean;
+  openai_global_turn_state_updated_at: string;
+  step_up_enabled: boolean; // 兼容字段：敏感操作不再强制 step-up 2FA
   audit_log_retention_days: number; // 审计日志保留天数
   login_agreement_enabled: boolean;
   login_agreement_mode: "modal" | "checkbox" | string;
@@ -764,8 +768,10 @@ export interface UpdateSettingsRequest {
   invitation_code_enabled?: boolean;
   totp_enabled?: boolean; // TOTP 双因素认证
   passkey_enabled?: boolean;
-  session_binding_enabled?: boolean; // 会话 IP/UA 绑定
-  step_up_enabled?: boolean; // 敏感操作 step-up 2FA
+  session_binding_enabled?: boolean; // 会话 User-Agent 绑定（IP 变化不触发退出，User-Agent 变化需重新登录）
+  openai_global_turn_state_enabled?: boolean;
+  openai_global_turn_state_account_id?: number;
+  step_up_enabled?: boolean; // 兼容字段：敏感操作不再强制 step-up 2FA
   audit_log_retention_days?: number; // 审计日志保留天数
   login_agreement_enabled?: boolean;
   login_agreement_mode?: "modal" | "checkbox" | string;

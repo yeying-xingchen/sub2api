@@ -3062,6 +3062,13 @@
         </p>
       </div>
 
+      <OpenAIAutoReauthSettings
+        v-if="form.platform === 'openai' && form.type === 'oauth'"
+        v-model:enabled="openaiAutoReauth.state.enabled"
+        v-model:login-credentials="openaiAutoReauth.state.loginCredentials"
+        creating
+      />
+
       <!-- OpenAI 自动透传开关（OAuth/API Key） -->
       <div
         v-if="form.platform === 'openai'"
@@ -3539,6 +3546,13 @@
 
     <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
+      <OpenAIAutoReauthSettings
+        v-if="form.platform === 'openai' && form.type === 'oauth'"
+        v-model:enabled="openaiAutoReauth.state.enabled"
+        v-model:login-credentials="openaiAutoReauth.state.loginCredentials"
+        creating
+      />
+
       <OAuthAuthorizationFlow
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
@@ -3981,6 +3995,8 @@ import {
   resolveOpenAIWSModeHintKey,
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
+import OpenAIAutoReauthSettings from '@/components/account/OpenAIAutoReauthSettings.vue'
+import { useOpenAIAutoReauth } from '@/components/account/openaiAutoReauth'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
 
 // Type for exposed OAuthAuthorizationFlow component
@@ -4148,6 +4164,13 @@ interface TempUnschedRuleForm {
 }
 
 // State
+const openaiAutoReauth = useOpenAIAutoReauth()
+const validateOpenAIAutoReauth = () => {
+  const error = openaiAutoReauth.validationError()
+  if (error) appStore.showError(t(error))
+  return !error
+}
+
 const step = ref(1)
 const submitting = ref(false)
 const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
@@ -5296,6 +5319,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
 
 // Methods
 const resetForm = () => {
+  openaiAutoReauth.reset()
   step.value = 1
   form.name = ''
   form.notes = ''
@@ -5413,6 +5437,7 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  openaiAutoReauth.reset()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -5622,6 +5647,7 @@ const handleVertexServiceAccountDrop = async (event: DragEvent) => {
 }
 
 const handleSubmit = async () => {
+  if (form.platform === 'openai' && form.type === 'oauth' && !validateOpenAIAutoReauth()) return
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
     if (!isGrokSSOInputMethod.value && !form.name.trim()) {
@@ -6286,6 +6312,7 @@ const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
 
 // OpenAI OAuth 授权码兑换
 const handleOpenAIExchange = async (authCode: string) => {
+  if (!validateOpenAIAutoReauth()) return
   const oauthClient = openaiOAuth
   if (!authCode.trim() || !oauthClient.sessionId.value) return
 
@@ -6309,6 +6336,7 @@ const handleOpenAIExchange = async (authCode: string) => {
     if (!tokenInfo) return
 
     const credentials = oauthClient.buildCredentials(tokenInfo)
+    openaiAutoReauth.apply(credentials)
     const oauthExtra = oauthClient.buildExtraInfo(tokenInfo) as Record<string, unknown> | undefined
     const extra = buildOpenAIExtra(oauthExtra)
     const shouldCreateOpenAI = form.platform === 'openai'
@@ -6367,7 +6395,11 @@ const handleOpenAIExchange = async (authCode: string) => {
 const OPENAI_MOBILE_RT_CLIENT_ID = 'app_LlGpXReQgckcGGUo2JrYvtJK'
 
 const buildOpenAICodexImportCredentialExtras = (): Record<string, unknown> | null => {
+  if (!validateOpenAIAutoReauth()) return null
   const credentials: Record<string, unknown> = {}
+  if (openaiAutoReauth.state.enabled || openaiAutoReauth.state.loginCredentials.trim()) {
+    openaiAutoReauth.apply(credentials)
+  }
   if (!isOpenAIModelRestrictionDisabled.value) {
     const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
     if (modelMapping) {
@@ -6419,9 +6451,25 @@ const isAgentIdentityImportContent = (content: string) => {
   }
 }
 
+// A single credential line must not be copied onto several imported identities.
+const isSingleCodexImport = (content: string): boolean => {
+  try {
+    const parsed = JSON.parse(content)
+    if (Array.isArray(parsed)) return parsed.length === 1
+    if (Array.isArray(parsed?.accounts)) return parsed.accounts.length === 1
+    return true
+  } catch {
+    return content.split('\n').filter((line) => line.trim()).length === 1
+  }
+}
+
 const handleOpenAIImportCodexSession = async (content: string) => {
   const oauthClient = openaiOAuth
   const trimmed = content.trim()
+  if (openaiAutoReauth.state.loginCredentials.trim() && !isSingleCodexImport(trimmed)) {
+    appStore.showError(t('admin.accounts.openai.autoReauth.singleAccountOnly'))
+    return
+  }
   if (!trimmed) {
     oauthClient.error.value = t('admin.accounts.oauth.openai.codexSessionEmpty')
     return
@@ -6552,6 +6600,11 @@ const handleOpenAIImportCodexPAT = async (accessToken: string) => {
 
 // OpenAI RT 批量验证和创建（共享逻辑）
 const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string) => {
+  if (!validateOpenAIAutoReauth()) return
+  if (openaiAutoReauth.state.loginCredentials.trim() && refreshTokenInput.split('\n').filter((line) => line.trim()).length > 1) {
+    appStore.showError(t('admin.accounts.openai.autoReauth.singleAccountOnly'))
+    return
+  }
   const oauthClient = openaiOAuth
   if (!refreshTokenInput.trim()) return
 
@@ -6589,6 +6642,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
         }
 
         const credentials = oauthClient.buildCredentials(tokenInfo)
+        openaiAutoReauth.apply(credentials)
         if (clientId) {
           credentials.client_id = clientId
         }

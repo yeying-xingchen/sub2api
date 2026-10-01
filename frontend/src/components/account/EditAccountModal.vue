@@ -1739,6 +1739,15 @@
         </p>
       </div>
 
+      <OpenAIAutoReauthSettings
+        v-if="account?.platform === 'openai' && account.type === 'oauth' && !isSparkShadow"
+        v-model:enabled="openaiAutoReauth.state.enabled"
+        v-model:login-credentials="openaiAutoReauth.state.loginCredentials"
+        :configured="openaiAutoReauth.state.configured"
+        :status="account.extra?.openai_auto_reauth"
+        :disabled="submitting"
+      />
+
       <!-- OpenAI 自动透传开关（OAuth/API Key） -->
       <div
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
@@ -3130,6 +3139,8 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
+import OpenAIAutoReauthSettings from '@/components/account/OpenAIAutoReauthSettings.vue'
+import { useOpenAIAutoReauth } from '@/components/account/openaiAutoReauth'
 import Toggle from '@/components/common/Toggle.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
@@ -4106,7 +4117,15 @@ const applyOpenAIModelMappingCredentials = (credentials: Record<string, unknown>
   }
 }
 
+const openaiAutoReauth = useOpenAIAutoReauth()
+const validateOpenAIAutoReauth = () => {
+  const error = openaiAutoReauth.validationError()
+  if (error) appStore.showError(t(error))
+  return !error
+}
+
 const syncFormFromAccount = (newAccount: Account | null) => {
+  openaiAutoReauth.reset(newAccount?.credentials)
   if (!newAccount) {
     return
   }
@@ -5057,6 +5076,7 @@ const parseDateTimeLocal = parseDateTimeLocalInput
 
 // Methods
 const handleClose = () => {
+  openaiAutoReauth.reset()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -5126,6 +5146,7 @@ const submitUpdateAccount = async (accountID: number, updatePayload: Record<stri
 
 const handleSubmit = async () => {
   if (!props.account) return
+  if (props.account.platform === 'openai' && props.account.type === 'oauth' && !isSparkShadow.value && !validateOpenAIAutoReauth()) return
   const accountID = props.account.id
 
   if (form.status !== 'active' && form.status !== 'inactive' && form.status !== 'error') {
@@ -5437,6 +5458,7 @@ const handleSubmit = async () => {
       const newCredentials: Record<string, unknown> = { ...currentCredentials }
       if (props.account.platform === 'openai') {
         applyOpenAIModelMappingCredentials(newCredentials)
+        if (!isSparkShadow.value) openaiAutoReauth.apply(newCredentials)
       } else {
         const modelMapping = buildModelRestrictionMapping()
         if (modelMapping) {

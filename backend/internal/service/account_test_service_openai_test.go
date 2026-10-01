@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/gin-gonic/gin"
@@ -28,8 +29,14 @@ type queuedHTTPUpstream struct {
 	tlsFlags  []bool
 }
 
-func (u *queuedHTTPUpstream) Do(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-	return nil, fmt.Errorf("unexpected Do call")
+func (u *queuedHTTPUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+	u.requests = append(u.requests, req)
+	if len(u.responses) == 0 {
+		return nil, fmt.Errorf("no mocked response")
+	}
+	resp := u.responses[0]
+	u.responses = u.responses[1:]
+	return resp, nil
 }
 
 func (u *queuedHTTPUpstream) DoWithTLS(req *http.Request, _ string, _ int64, _ int, profile *tlsfingerprint.Profile) (*http.Response, error) {
@@ -529,6 +536,55 @@ func TestAccountTestService_OpenAI401SetsPermanentErrorOnly(t *testing.T) {
 	require.Zero(t, repo.rateLimitedID)
 	require.Zero(t, repo.clearedErrorID)
 	require.Nil(t, account.RateLimitResetAt)
+}
+
+func TestAccountTestService_OpenAI401AttemptsAutomaticReauthorization(t *testing.T) {
+	for _, name := range []string{"text", "shadow", "image", "disabled"} {
+		t.Run(name, func(t *testing.T) {
+			ctx, recorder := newTestContext()
+			owner := reauthTestAccount()
+			if name == "disabled" {
+				owner.Credentials[OpenAIAutoReauthEnabledKey] = false
+			}
+			account := owner
+			if name == "shadow" {
+				account = &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+					Status: StatusActive, Schedulable: true, ParentAccountID: &owner.ID, QuotaDimension: QuotaDimensionSpark}
+			}
+			legacy := &openAIAccountTestRepo{}
+			repo := &reauthRepoStub{AccountRepository: legacy, account: owner, claimAllowed: true,
+				completeAllowed: true, completed: make(chan bool, 1)}
+			auto := NewOpenAIAutoReauthService(repo, nil, reauthTestCipher{}, nil)
+			auto.login = func(_ context.Context, login openai.LoginCredentials, _, workspace string) (*openai.TokenResponse, error) {
+				return reauthTestToken(login.Email, workspace), nil
+			}
+			rate := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+			rate.openAIAutoReauth = auto
+			upstream := &queuedHTTPUpstream{responses: []*http.Response{
+				newJSONResponse(http.StatusUnauthorized, `{"error":{"code":"token_revoked","message":"token rejected"}}`),
+			}}
+			svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream,
+				openaiGatewayService: &OpenAIGatewayService{rateLimitService: rate}}
+			model := "gpt-5.4"
+			if name == "image" {
+				model = "gpt-image-1"
+			}
+			err := svc.testOpenAIAccountConnection(ctx, account, model, "", "")
+			require.Error(t, err, "the failed probe must not report a successful login")
+			require.NotContains(t, recorder.Body.String(), `"success":true`)
+			if name == "disabled" {
+				require.Equal(t, account.ID, legacy.setErrorID)
+				require.Zero(t, repo.claims)
+				return
+			}
+			require.True(t, awaitReauthCompletion(t, repo))
+			require.Zero(t, legacy.setErrorID, "automatic login must not be overwritten by a permanent error")
+			repo.mu.Lock()
+			defer repo.mu.Unlock()
+			require.Equal(t, 1, repo.claims)
+			require.Equal(t, "new-access", repo.credentials["access_token"])
+		})
+	}
 }
 
 func TestAccountTestService_OpenAIAPIKeyResponsesUsesCodexProbeHeaders(t *testing.T) {

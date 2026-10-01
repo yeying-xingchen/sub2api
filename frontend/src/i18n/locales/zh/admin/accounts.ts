@@ -404,6 +404,11 @@ export default {
       },
       types: {
         oauth: 'OAuth',
+        setupToken: 'Setup Token',
+        apiKey: 'API Key',
+        upstream: '对接上游',
+        bedrock: 'AWS Bedrock',
+        serviceAccount: '服务账号',
         chatgptOauth: 'ChatGPT OAuth',
         responsesApi: 'Responses API',
         googleOauth: 'Google OAuth',
@@ -411,7 +416,6 @@ export default {
         antigravityOauth: 'Antigravity OAuth',
         grokOauth: 'Grok OAuth',
         antigravityApikey: '通过 Base URL + API Key 连接',
-        upstream: '对接上游',
         upstreamDesc: '通过 Base URL + API Key 连接上游'
       },
       antigravityProjectIdLabel: 'GCP Project ID（可选）',
@@ -732,6 +736,23 @@ export default {
       },
       // OpenAI specific hints
       openai: {
+        autoReauth: {
+          title: '401 自动重新授权',
+          description: '遇到上游 401 时，使用已保存的 OpenAI 邮箱、密码与 2FA 密钥自动重新登录。',
+          credentialsLabel: '上游账户登录资料',
+          placeholder: '邮箱----密码----2FA',
+          secretHint: '2FA 请填写长期 Base32 密钥或 otpauth://totp/ 地址，不能填写 6 位动态验证码。',
+          configured: '已保存登录资料。留空保留，填写新内容则替换；已保存原文不会显示。',
+          retainHint: '关闭自动重新授权不会清除已保存的登录资料。',
+          createHint: '这是附加配置。创建账户仍须完成原有 token 授权；批量导入请先创建，再逐个编辑登录资料。',
+          saveOnly: '仅保存自动重新授权设置',
+          saved: '自动重新授权设置已保存',
+          required: '启用自动重新授权前，请填写邮箱、密码与长期 2FA 密钥。',
+          invalidFormat: '请按 邮箱----密码----2FA 格式输入一行完整登录资料。',
+          invalidSecret: '2FA 必须是有效的长期 Base32 密钥或包含该密钥的 otpauth://totp/ 地址，不能使用 6 位验证码。',
+          singleAccountOnly: '一行登录资料只能用于一个账户。请单账户导入，或批量创建后逐个编辑自动重新授权设置。',
+          status: { running: '正在自动重新授权', succeeded: '上次自动重新授权成功', failed: '上次自动重新授权失败' }
+        },
         baseUrlHint: '留空使用官方 OpenAI API',
         apiKeyHint: '您的 OpenAI API Key',
         oauthPassthrough: '自动透传（仅替换认证）',

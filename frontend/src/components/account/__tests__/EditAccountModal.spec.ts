@@ -1731,3 +1731,68 @@ describe('EditAccountModal OpenAI 自动使用重置卡', () => {
     wrapper.unmount()
   })
 })
+
+
+describe('EditAccountModal OpenAI automatic reauthorization', () => {
+  const raw = 'person@example.com----password----otpauth://totp/OpenAI?secret=JBSWY3DPEHPK3PXP'
+
+  beforeEach(() => {
+    authIsSimpleMode.value = true
+    updateAccountMock.mockReset().mockResolvedValue(buildOpenAIOAuthParentAccount())
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+  })
+
+  it('submits credentials and the enabled switch for an existing OAuth account', async () => {
+    const wrapper = mountModal(buildOpenAIOAuthParentAccount())
+    await wrapper.get('[data-testid="openai-login-credentials"]').setValue(raw)
+    await wrapper.get('[data-testid="openai-auto-reauth-toggle"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).toMatchObject({
+      openai_auto_reauth_enabled: true,
+      openai_login_credentials: raw
+    })
+    wrapper.unmount()
+  })
+
+  it.each([true, false])('retains saved credentials with a blank input and enabled=%s', async (enabled) => {
+    const account = buildOpenAIOAuthParentAccount()
+    account.credentials = { ...account.credentials,
+      openai_auto_reauth_enabled: true,
+      openai_login_credentials_configured: true,
+      openai_login_credentials: 'legacy value must never be read back'
+    }
+    const wrapper = mountModal(account)
+    expect(wrapper.get<HTMLInputElement>('[data-testid="openai-login-credentials"]').element.value).toBe('')
+    expect(wrapper.find('[data-testid="openai-login-credentials-configured"]').exists()).toBe(true)
+    if (!enabled) await wrapper.get('[data-testid="openai-auto-reauth-toggle"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    const credentials = updateAccountMock.mock.calls[0]?.[1]?.credentials
+    expect(credentials.openai_auto_reauth_enabled).toBe(enabled)
+    expect(credentials).not.toHaveProperty('openai_login_credentials')
+    expect(credentials).not.toHaveProperty('openai_login_credentials_configured')
+    wrapper.unmount()
+  })
+
+  it('cannot enable without new or previously saved login credentials', async () => {
+    const wrapper = mountModal(buildOpenAIOAuthParentAccount())
+    await wrapper.get('[data-testid="openai-auto-reauth-toggle"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each([buildAccount, buildGrokOAuthAccount, buildAntigravityAccount, buildOpenAISparkShadowAccount])('hides settings for unsupported accounts', (build) => {
+    const wrapper = mountModal(build())
+    expect(wrapper.find('[data-testid="openai-auto-reauth-settings"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('resets entered secrets when the dialog is reopened', async () => {
+    const wrapper = mountModal(buildOpenAIOAuthParentAccount())
+    await wrapper.get('[data-testid="openai-login-credentials"]').setValue(raw)
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true })
+    expect(wrapper.get<HTMLInputElement>('[data-testid="openai-login-credentials"]').element.value).toBe('')
+    wrapper.unmount()
+  })
+})

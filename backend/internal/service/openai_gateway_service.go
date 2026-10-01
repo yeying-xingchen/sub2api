@@ -508,6 +508,17 @@ type OpenAIGatewayService struct {
 	// 剥离跨账号回带（openai_codex_turn_state.go）。
 	openaiCodexTurnStateOrigins sync.Map
 	openaiCodexTurnStateWrites  atomic.Uint64
+	globalTurnStateRefreshMu    sync.Mutex
+	globalTurnStateConfigMu     sync.RWMutex
+	globalTurnStateConfigAt     time.Time
+	globalTurnStateEnabled      bool
+	globalTurnStateAccountID    int64
+	globalTurnStateValue        string
+	globalTurnStateUpdatedAt    time.Time
+	globalTurnStateSourceID     int64
+	globalTurnStateAttemptAt    time.Time
+	globalTurnStateStop         chan struct{}
+	globalTurnStateWG           sync.WaitGroup
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -585,6 +596,7 @@ func NewOpenAIGatewayService(
 		openAITokenProvider.SetAccountRuntimeBlocker(svc)
 	}
 	svc.logOpenAIWSModeBootstrap()
+	svc.startGlobalTurnStateRefresh()
 	return svc
 }
 
@@ -697,7 +709,15 @@ func (s *OpenAIGatewayService) billingDeps() *billingDeps {
 // CloseOpenAIWSPool 关闭 OpenAI WebSocket 连接池的后台 worker 和空闲连接。
 // 应在应用优雅关闭时调用。
 func (s *OpenAIGatewayService) CloseOpenAIWSPool() {
-	if s != nil && s.openaiWSPool != nil {
+	if s == nil {
+		return
+	}
+	if s.globalTurnStateStop != nil {
+		close(s.globalTurnStateStop)
+		s.globalTurnStateStop = nil
+		s.globalTurnStateWG.Wait()
+	}
+	if s.openaiWSPool != nil {
 		s.openaiWSPool.Close()
 	}
 }

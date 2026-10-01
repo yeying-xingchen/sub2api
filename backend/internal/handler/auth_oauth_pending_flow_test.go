@@ -2264,7 +2264,7 @@ func TestResolvePendingOAuthTargetUserIDNormalizesLegacySpacingAndCase(t *testin
 	require.Equal(t, existingUser.ID, resolvedUserID)
 }
 
-func TestBindOIDCOAuthLoginReturns2FAChallengeWhenUserHasTotp(t *testing.T) {
+func TestBindOIDCOAuthLoginDoesNotRequire2FAWhenUserHasTotp(t *testing.T) {
 	totpCache := &oauthPendingFlowTotpCacheStub{}
 	handler, client := newOAuthPendingFlowTestHandlerWithDependencies(t, oauthPendingFlowTestHandlerOptions{
 		settingValues: map[string]string{
@@ -2322,19 +2322,11 @@ func TestBindOIDCOAuthLoginReturns2FAChallengeWhenUserHasTotp(t *testing.T) {
 	handler.BindOIDCOAuthLogin(ginCtx)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	data := decodeJSONResponseData(t, recorder)
-	require.Equal(t, true, data["requires_2fa"])
-	require.Equal(t, "o***r@example.com", data["user_email_masked"])
-	tempToken, ok := data["temp_token"].(string)
-	require.True(t, ok)
-	require.NotEmpty(t, tempToken)
-
-	loginSession, err := totpCache.GetLoginSession(ctx, tempToken)
-	require.NoError(t, err)
-	require.NotNil(t, loginSession)
-	require.NotNil(t, loginSession.PendingOAuthBind)
-	require.Equal(t, session.SessionToken, loginSession.PendingOAuthBind.PendingSessionToken)
-	require.Equal(t, session.BrowserSessionKey, loginSession.PendingOAuthBind.BrowserSessionKey)
+	data := decodeJSONBody(t, recorder)
+	require.NotEmpty(t, data["access_token"])
+	require.NotEmpty(t, data["refresh_token"])
+	require.Equal(t, "Bearer", data["token_type"])
+	require.NotContains(t, data, "requires_2fa")
 
 	identityCount, err := client.AuthIdentity.Query().
 		Where(
@@ -2344,11 +2336,11 @@ func TestBindOIDCOAuthLoginReturns2FAChallengeWhenUserHasTotp(t *testing.T) {
 		).
 		Count(ctx)
 	require.NoError(t, err)
-	require.Zero(t, identityCount)
+	require.Equal(t, 1, identityCount)
 
 	storedSession, err := client.PendingAuthSession.Get(ctx, session.ID)
 	require.NoError(t, err)
-	require.Nil(t, storedSession.ConsumedAt)
+	require.NotNil(t, storedSession.ConsumedAt)
 }
 
 func TestLogin2FACompletesPendingOAuthBindAndConsumesSession(t *testing.T) {

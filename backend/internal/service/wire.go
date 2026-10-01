@@ -195,6 +195,9 @@ func ProvideOpenAIQuotaService(
 ) *OpenAIQuotaService {
 	service := NewOpenAIQuotaService(accountRepo, proxyRepo, tokenProvider, privacyClientFactory, referralClient)
 	service.agentIdentityWS = openAIGatewayService
+	if openAIGatewayService != nil {
+		service.rateLimitService = openAIGatewayService.rateLimitService
+	}
 	return service
 }
 
@@ -509,6 +512,9 @@ func ProvideRateLimitService(
 	settingService *SettingService,
 	tokenCacheInvalidator TokenCacheInvalidator,
 	ollamaCloudUsage *OllamaCloudUsageService,
+	proxyRepo ProxyRepository,
+	encryptor SecretEncryptor,
+	refreshAPI *OAuthRefreshAPI,
 ) *RateLimitService {
 	svc := NewRateLimitService(accountRepo, usageRepo, cfg, geminiQuotaService, tempUnschedCache)
 	if healthCache, ok := tempUnschedCache.(OpenAIAPIKeyHealthCache); ok {
@@ -519,6 +525,8 @@ func ProvideRateLimitService(
 	svc.SetSettingService(settingService)
 	svc.SetTokenCacheInvalidator(tokenCacheInvalidator)
 	svc.SetOllamaCloudUsageProbeScheduler(ollamaCloudUsage)
+	svc.openAIAutoReauth = NewOpenAIAutoReauthService(accountRepo, proxyRepo, encryptor, tokenCacheInvalidator)
+	svc.openAIAutoReauth.refreshAPI = refreshAPI
 	return svc
 }
 

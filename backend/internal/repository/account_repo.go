@@ -526,6 +526,9 @@ func (r *accountRepository) updateLockedAccount(
 	if err != nil {
 		return nil, err
 	}
+	if err := guardOpenAIAccountUpdate(ctx, client, account.ID, extra); err != nil {
+		return nil, err
+	}
 	account.Extra = extra
 
 	schedulable := account.Schedulable

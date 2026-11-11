@@ -50,13 +50,6 @@ vi.mock('@/stores', () => ({
   }),
 }))
 
-vi.mock('@/composables/useStepUp', () => ({
-  useStepUp: () => ({ run: (fn: () => unknown) => fn() }),
-  isStepUpBlocked: () => false,
-  isStepUpCancelled: () => false,
-  stepUpBlockReason: () => '',
-}))
-
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string, params?: Record<string, unknown>) =>
@@ -79,13 +72,7 @@ const baseRecord = (id: string, parts?: unknown[]) => ({
 const wrappers: ReturnType<typeof mount>[] = []
 
 function mountBackupView() {
-  const wrapper = mount(BackupView, {
-    global: {
-      stubs: {
-        TotpStepUpDialog: true,
-      },
-    },
-  })
+  const wrapper = mount(BackupView)
   wrappers.push(wrapper)
   return wrapper
 }

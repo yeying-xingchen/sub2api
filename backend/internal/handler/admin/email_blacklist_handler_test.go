@@ -118,7 +118,7 @@ func TestUpdateRegistrationEmailBlacklist_InvalidEntryRejected(t *testing.T) {
 
 func setupEmailBlacklistUserRouter(stub service.AdminService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	handler := NewUserHandler(stub, nil, nil, nil, nil, nil, nil)
+	handler := NewUserHandler(stub, nil, nil, nil)
 	router := gin.New()
 	router.POST("/api/v1/admin/users/blacklist-matches", handler.FindBlacklistedEmailUsers)
 	router.POST("/api/v1/admin/users/batch-disable", handler.BatchDisable)

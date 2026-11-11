@@ -1093,3 +1093,26 @@ func buildCodexImportTestJWT(t *testing.T, exp time.Time, extraClaims map[string
 	}
 	return base64.RawURLEncoding.EncodeToString(headerBytes) + "." + base64.RawURLEncoding.EncodeToString(claimBytes) + "."
 }
+
+func TestImportCodexSessionsPassesAutoProxyMode(t *testing.T) {
+	svc := newCodexImportMemoryAdminService(nil)
+	handler := NewAccountHandler(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	req := CodexSessionImportRequest{SkipDefaultGroupBind: boolPtr(true), ProxyMode: "least_used"}
+	entries := []codexImportEntry{
+		{Index: 1, Value: buildCodexRefreshImportValue(t, "workspace-auto", "user-auto", "refresh-auto")},
+	}
+
+	result, err := handler.importCodexSessions(context.Background(), req, entries)
+	if err != nil {
+		t.Fatalf("importCodexSessions error = %v", err)
+	}
+	if result.Created != 1 || result.Failed != 0 {
+		t.Fatalf("result = %+v, want one created account", result)
+	}
+	if len(svc.createdAccounts) != 1 {
+		t.Fatalf("created accounts = %d, want 1", len(svc.createdAccounts))
+	}
+	if got := svc.createdAccounts[0].ProxyMode; got != "least_used" {
+		t.Fatalf("created proxy mode = %q, want least_used", got)
+	}
+}

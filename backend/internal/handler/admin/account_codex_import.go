@@ -28,6 +28,8 @@ type CodexSessionImportRequest struct {
 	Notes                   *string        `json:"notes"`
 	GroupIDs                []int64        `json:"group_ids"`
 	ProxyID                 *int64         `json:"proxy_id"`
+	ProxyMode               string         `json:"proxy_mode"`
+	RandomProxy             bool           `json:"random_proxy"`
 	Concurrency             *int           `json:"concurrency"`
 	Priority                *int           `json:"priority"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
@@ -141,6 +143,13 @@ func (h *AccountHandler) ImportCodexSession(c *gin.Context) {
 		response.BadRequest(c, "load_factor must be <= 10000")
 		return
 	}
+	proxyMode, err := service.NormalizeAccountProxyMode(req.ProxyMode, req.ProxyID, req.RandomProxy)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	req.ProxyMode = proxyMode
+	req.RandomProxy = false
 
 	entries, err := parseCodexSessionImportEntries(req)
 	if err != nil {
@@ -279,6 +288,7 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 			updateInput := &service.UpdateAccountInput{
 				Credentials:        mergedCredentials,
 				Extra:              mergedExtra,
+				ProxyMode:          req.ProxyMode,
 				Concurrency:        req.Concurrency,
 				Priority:           req.Priority,
 				RateMultiplier:     req.RateMultiplier,
@@ -336,6 +346,7 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 			Credentials:           credentials,
 			Extra:                 extra,
 			ProxyID:               req.ProxyID,
+			ProxyMode:             req.ProxyMode,
 			Concurrency:           concurrency,
 			Priority:              priority,
 			RateMultiplier:        req.RateMultiplier,

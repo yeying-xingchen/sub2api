@@ -27,6 +27,66 @@ func ProvideGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthCli
 	return svc
 }
 
+// ProvidePelicanTestService wires the Pelican IQ test runner.
+func ProvidePelicanTestService(accountRepo AccountRepository, accountTest *AccountTestService, repo PelicanTestRepository) *PelicanTestService {
+	return NewPelicanTestService(accountRepo, accountTest, repo)
+}
+
+// ProvideCodexTicketService wires the Codex ticket store and settings port.
+func ProvideCodexTicketService(
+	repo CodexTicketRepository,
+	accountRepo AccountRepository,
+	tokenProvider *OpenAITokenProvider,
+	upstream HTTPUpstream,
+	settingService *SettingService,
+) *CodexTicketService {
+	var settingRepo SettingRepository
+	if settingService != nil {
+		settingRepo = settingService.settingRepo
+	}
+	return NewCodexTicketService(accountRepo, tokenProvider, upstream, repo, settingRepo)
+}
+
+// ProvideOpenAIGatewayService keeps NewOpenAIGatewayService test-friendly while
+// attaching the Codex ticket service in production wiring.
+func ProvideOpenAIGatewayService(
+	accountRepo AccountRepository,
+	usageLogRepo UsageLogRepository,
+	usageBillingRepo UsageBillingRepository,
+	userRepo UserRepository,
+	userSubRepo UserSubscriptionRepository,
+	userGroupRateRepo UserGroupRateRepository,
+	cache GatewayCache,
+	cfg *config.Config,
+	schedulerSnapshot *SchedulerSnapshotService,
+	concurrencyService *ConcurrencyService,
+	billingService *BillingService,
+	rateLimitService *RateLimitService,
+	billingCacheService *BillingCacheService,
+	httpUpstream HTTPUpstream,
+	deferredService *DeferredService,
+	openAITokenProvider *OpenAITokenProvider,
+	grokTokenProvider *GrokTokenProvider,
+	resolver *ModelPricingResolver,
+	channelService *ChannelService,
+	balanceNotifyService *BalanceNotifyService,
+	settingService *SettingService,
+	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	codexTickets *CodexTicketService,
+) *OpenAIGatewayService {
+	svc := NewOpenAIGatewayService(
+		accountRepo, usageLogRepo, usageBillingRepo, userRepo, userSubRepo, userGroupRateRepo,
+		cache, cfg, schedulerSnapshot, concurrencyService, billingService, rateLimitService,
+		billingCacheService, httpUpstream, deferredService, openAITokenProvider, grokTokenProvider,
+		resolver, channelService, balanceNotifyService, settingService, userPlatformQuotaRepo,
+	)
+	if codexTickets != nil {
+		svc.codexTickets = codexTickets
+		codexTickets.Start()
+	}
+	return svc
+}
+
 // BuildInfo contains build information
 type BuildInfo struct {
 	Version   string
@@ -883,7 +943,9 @@ var ProviderSet = wire.NewSet(
 	NewAnnouncementService,
 	NewAdminService,
 	NewGatewayService,
-	NewOpenAIGatewayService,
+	ProvideOpenAIGatewayService,
+	ProvideCodexTicketService,
+	ProvidePelicanTestService,
 	ProvideImageStorageSettingService,
 	ProvideImageTaskService,
 	ProvideBatchImageModelPricingResolver,

@@ -134,13 +134,10 @@ func TestAdminFullAccessKeepsIdentityAndJWTBoundary(t *testing.T) {
 		c.Status(204)
 	})
 	r.POST("/api/v1/admin/settings/admin-api-keys", func(c *gin.Context) { t.Fatal("全权key不能管理密钥") })
-	r.GET("/api/v1/admin/interactive", func(c *gin.Context) {
-		require.False(t, enforceStepUp(c, nil, nil, nil))
-	})
 	for _, tc := range []struct {
 		method, path string
 		status       int
-	}{{"GET", "/api/v1/admin/future", 204}, {"POST", "/api/v1/admin/settings/admin-api-keys", 403}, {"GET", "/api/v1/admin/interactive", 403}} {
+	}{{"GET", "/api/v1/admin/future", 204}, {"POST", "/api/v1/admin/settings/admin-api-keys", 403}} {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(tc.method, tc.path, nil)
 		req.Header.Set("x-api-key", key)

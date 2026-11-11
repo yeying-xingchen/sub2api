@@ -1,12 +1,14 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"net/http"
@@ -23,6 +25,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/cespare/xxhash/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
 
@@ -513,6 +516,10 @@ type OpenAIGatewayService struct {
 	// 剥离跨账号回带（openai_codex_turn_state.go）。
 	openaiCodexTurnStateOrigins sync.Map
 	openaiCodexTurnStateWrites  atomic.Uint64
+
+	// codexTickets 负责 Codex 打票、票据注入与全站共享票池。
+	// 由 ConfigureCodexTickets 在装配阶段注入；测试未配置时保持 nil。
+	codexTickets *CodexTicketService
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -591,6 +598,52 @@ func NewOpenAIGatewayService(
 	}
 	svc.logOpenAIWSModeBootstrap()
 	return svc
+}
+
+// ConfigureCodexTickets 装配 Codex 打票服务并启动后台打票循环。
+func (s *OpenAIGatewayService) ConfigureCodexTickets(repo CodexTicketRepository) {
+	if s == nil || repo == nil {
+		return
+	}
+	var settingRepo SettingRepository
+	if s.settingService != nil {
+		settingRepo = s.settingService.settingRepo
+	}
+	s.codexTickets = NewCodexTicketService(s.accountRepo, s.openAITokenProvider, s.httpUpstream, repo, settingRepo)
+	s.codexTickets.Start()
+}
+
+// CodexTickets 返回已装配的打票服务，未装配时返回 nil。
+func (s *OpenAIGatewayService) CodexTickets() *CodexTicketService {
+	if s == nil {
+		return nil
+	}
+	return s.codexTickets
+}
+
+// injectCodexTurnState 按出站 body.model 注入 turn-state（自己的票优先，
+// 其次是全站共享票）。未启用打票或模型不在打票范围时保持原样。
+func (s *OpenAIGatewayService) injectCodexTurnState(ctx context.Context, account *Account, body []byte, req *http.Request) error {
+	if s == nil || s.codexTickets == nil || req == nil || account == nil {
+		return nil
+	}
+	model := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	if model == "" {
+		return nil
+	}
+	nextBody, err := s.codexTickets.Apply(ctx, account, model, req.Header, body)
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(nextBody, body) {
+		return nil
+	}
+	req.Body = io.NopCloser(bytes.NewReader(nextBody))
+	req.ContentLength = int64(len(nextBody))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(nextBody)), nil
+	}
+	return nil
 }
 
 // ResolveChannelMapping 解析渠道级模型映射（代理到 ChannelService）

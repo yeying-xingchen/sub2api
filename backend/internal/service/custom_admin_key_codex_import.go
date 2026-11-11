@@ -158,6 +158,7 @@ func (s *adminServiceImpl) ScopedAdminUpdateCodex(ctx context.Context, id int64,
 		if err != nil {
 			return nil, err
 		}
+		safe.ProxyMode = ""
 		return s.UpdateAccount(txctx, id, &safe)
 	})
 	return result, err

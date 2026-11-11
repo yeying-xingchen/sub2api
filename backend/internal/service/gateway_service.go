@@ -706,6 +706,7 @@ type UpstreamFailoverError struct {
 	RequestScopedTransient   bool          // 故障因素与账号无关（如上游按客户端身份/模型容量降载）：可同账号重试，但不得据此对账号做临时封禁
 	SafeToFailoverAfterWrite bool          // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
 	BoundUpstreamPassthrough bool          // 绑定显式缓存的请求在上游网关账号上收到的 429 / 5xx：反映持有缓存的上游账号状态，原样回写不走错误映射
+	DisableSameAccountRetry  bool          // 合成类 5xx（首包超时、空响应拒答等）不按“临时上游 5xx”在同账号重试，直接走原有换号语义
 	Stage                    GatewayFailureStage
 	Scope                    GatewayFailureScope
 	Reason                   GatewayFailureReason
@@ -723,6 +724,42 @@ func (e *UpstreamFailoverError) Error() string {
 
 func (e *UpstreamFailoverError) ShouldRetryNextAccount() bool {
 	return e != nil && e.NextAccountAction != NextAccountStop
+}
+
+// IsTransientUpstream5xx reports whether the upstream status is a temporary
+// service-side failure (5xx/Cloudflare 52x). These attempts never produced a
+// billable completion, so the same request may be replayed before the gateway
+// switches credentials. Without this, a single-account group surfaces a
+// transient 5xx to the client as "Upstream service temporarily unavailable"
+// even though the upstream would have recovered on the next attempt.
+func (e *UpstreamFailoverError) IsTransientUpstream5xx() bool {
+	if e == nil || e.DisableSameAccountRetry {
+		return false
+	}
+	return isTransientUpstream5xxStatus(e.StatusCode)
+}
+
+// isTransientUpstream5xxStatus is the status-only form used by upstream
+// classification code that has not built a failover error yet.
+func isTransientUpstream5xxStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout,
+		520, 521, 522, 523, 524:
+		return true
+	default:
+		return false
+	}
+}
+
+// ShouldRetryOnSameAccount reports whether the attempt should be replayed on
+// the same account (bounded by the account retry budget) before failover.
+// Explicit RetryableOnSameAccount errors keep their existing behavior; plain
+// transient 5xx errors opt in here so every handler loop applies one policy.
+func (e *UpstreamFailoverError) ShouldRetryOnSameAccount() bool {
+	return e != nil && (e.RetryableOnSameAccount || e.IsTransientUpstream5xx())
 }
 
 func (e *UpstreamFailoverError) IsCredentialFailure() bool {

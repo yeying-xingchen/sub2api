@@ -36,6 +36,8 @@ import riskControlAPI from './riskControl'
 import adminComplianceAPI from './compliance'
 import auditAPI from './audit'
 import pluginsAPI from './plugins'
+import codexTicketsAPI from './codexTickets'
+import pelicanTestsAPI from './pelicanTests'
 
 /**
  * Unified admin API object for convenient access
@@ -73,7 +75,9 @@ export const adminAPI = {
   riskControl: riskControlAPI,
   compliance: adminComplianceAPI,
   audit: auditAPI,
-  plugins: pluginsAPI
+  plugins: pluginsAPI,
+  codexTickets: codexTicketsAPI,
+  pelicanTests: pelicanTestsAPI
 }
 
 export {
@@ -109,7 +113,9 @@ export {
   riskControlAPI,
   adminComplianceAPI,
   auditAPI,
-  pluginsAPI
+  pluginsAPI,
+  codexTicketsAPI,
+  pelicanTestsAPI
 }
 
 export default adminAPI
@@ -118,6 +124,22 @@ export default adminAPI
 export type { AuditLog, AuditLogQuery, AuditLogListResponse } from './audit'
 export type { BalanceHistoryItem } from './users'
 export type { ErrorPassthroughRule, CreateRuleRequest, UpdateRuleRequest } from './errorPassthrough'
+export type {
+  PelicanTestListItem,
+  PelicanTestRecord,
+  PelicanTestListResult
+} from './pelicanTests'
+export type {
+  CodexTicketSettings,
+  CodexTicketOverview,
+  CodexTicketAccountStatus,
+  CodexTicketPoolEntry,
+  CodexTicketModelStatus,
+  CodexTicketHarvestSummary,
+  CodexIQTestResult,
+  CodexTicketListItem,
+  CodexTicketListResult
+} from './codexTickets'
 export type { BackupAgentHealth, DataManagementConfig } from './dataManagement'
 export type { TLSFingerprintProfile, CreateProfileRequest, UpdateProfileRequest } from './tlsFingerprintProfile'
 export type { ContentModerationConfig, ContentModerationLog, ModerationMode } from './riskControl'

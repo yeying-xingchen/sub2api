@@ -18,7 +18,7 @@ import (
 // login page silently changed name.
 
 func TestUpdateSettingsPartialPayloadKeepsUnsentKeys(t *testing.T) {
-	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+	h, repo := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeySiteName:         "Example Gateway",
 		service.SettingKeySiteSubtitle:     "Example Gateway Platform",
 		service.SettingKeySMTPHost:         "smtp.example.com",
@@ -42,7 +42,7 @@ func TestUpdateSettingsPartialPayloadKeepsUnsentKeys(t *testing.T) {
 // A full payload keeps whole-document semantics: fields explicitly set to their
 // zero value are still cleared.
 func TestUpdateSettingsFullPayloadStillClearsSentEmptyFields(t *testing.T) {
-	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+	h, repo := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeySiteName: "Example Gateway",
 	})
 
@@ -56,7 +56,7 @@ func TestUpdateSettingsFullPayloadStillClearsSentEmptyFields(t *testing.T) {
 // smtp_from_email is the one request field whose JSON name differs from its
 // setting key; the alias keeps it from being treated as always-omitted.
 func TestUpdateSettingsSMTPFromAliasIsWritable(t *testing.T) {
-	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+	h, repo := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeySMTPFrom: "old@example.com",
 	})
 
@@ -67,7 +67,7 @@ func TestUpdateSettingsSMTPFromAliasIsWritable(t *testing.T) {
 }
 
 func TestUpdateSettingsGrokDefaultBaseURLModeIsWritable(t *testing.T) {
-	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+	h, repo := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeyGrokDefaultBaseURLMode: service.GrokDefaultBaseURLModeCLI,
 	})
 
@@ -79,7 +79,7 @@ func TestUpdateSettingsGrokDefaultBaseURLModeIsWritable(t *testing.T) {
 }
 
 func TestUpdateSettingsRejectsTwoCaptchaProviders(t *testing.T) {
-	h, _ := newStepUpSwitchTestHandler(t, map[string]string{
+	h, _ := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeyTurnstileEnabled:   "true",
 		service.SettingKeyTurnstileSiteKey:   "site-key",
 		service.SettingKeyTurnstileSecretKey: "turnstile-secret",
@@ -101,7 +101,7 @@ func TestUpdateSettingsRejectsTwoCaptchaProviders(t *testing.T) {
 }
 
 func TestUpdateSettingsRequiresFourTencentCaptchaCredentialsWhenEnabled(t *testing.T) {
-	h, _ := newStepUpSwitchTestHandler(t, map[string]string{})
+	h, _ := newSettingsTestHandler(t, map[string]string{})
 
 	rec := doUpdateSettings(t, h, map[string]any{
 		"tencent_captcha_enabled": true,
@@ -113,7 +113,7 @@ func TestUpdateSettingsRequiresFourTencentCaptchaCredentialsWhenEnabled(t *testi
 }
 
 func TestUpdateSettingsRetainsStoredTencentCaptchaCredentialsWhenInputsEmpty(t *testing.T) {
-	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+	h, repo := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeyTencentCaptchaAppSecretKey:   "stored-app-secret",
 		service.SettingKeyTencentCaptchaCloudSecretID:  "stored-cloud-secret-id",
 		service.SettingKeyTencentCaptchaCloudSecretKey: "stored-cloud-secret-key",
@@ -136,7 +136,7 @@ func TestUpdateSettingsRetainsStoredTencentCaptchaCredentialsWhenInputsEmpty(t *
 // 天御站点决定前端加载哪个 SDK 与服务端打哪个接入点，两端必须一致。
 // 部分载荷把它重置回中国站，会让已配国际站的部署在下一次任意保存后整体失效。
 func TestUpdateSettingsPartialPayloadKeepsTencentCaptchaRegion(t *testing.T) {
-	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+	h, repo := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeyTencentCaptchaRegion: service.TencentCaptchaRegionINTL,
 	})
 
@@ -148,7 +148,7 @@ func TestUpdateSettingsPartialPayloadKeepsTencentCaptchaRegion(t *testing.T) {
 }
 
 func TestUpdateSettingsNormalizesUnknownTencentCaptchaRegion(t *testing.T) {
-	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+	h, repo := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeyTencentCaptchaRegion: service.TencentCaptchaRegionINTL,
 	})
 
@@ -161,7 +161,7 @@ func TestUpdateSettingsNormalizesUnknownTencentCaptchaRegion(t *testing.T) {
 }
 
 func TestUpdateSettingsWritesTencentCaptchaRegionWhenSent(t *testing.T) {
-	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+	h, repo := newSettingsTestHandler(t, map[string]string{})
 
 	rec := doUpdateSettings(t, h, map[string]any{"tencent_captcha_region": "intl"}, nil)
 
@@ -171,7 +171,7 @@ func TestUpdateSettingsWritesTencentCaptchaRegionWhenSent(t *testing.T) {
 }
 
 func TestUpdateSettingsValidatesTencentCaptchaAppIDWhenEnabledFlagIsOmitted(t *testing.T) {
-	h, _ := newStepUpSwitchTestHandler(t, map[string]string{
+	h, _ := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeyTencentCaptchaEnabled:        "true",
 		service.SettingKeyTencentCaptchaAppID:          "123456789",
 		service.SettingKeyTencentCaptchaAppSecretKey:   "stored-app-secret",
@@ -190,7 +190,7 @@ func TestUpdateSettingsValidatesTencentCaptchaAppIDWhenEnabledFlagIsOmitted(t *t
 // subscription_enabled is an opt-out switch: an explicit false is written as-is,
 // and a later payload that omits the field keeps the stored value.
 func TestUpdateSettingsSubscriptionEnabledIsWritableAndKeptWhenOmitted(t *testing.T) {
-	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+	h, repo := newSettingsTestHandler(t, map[string]string{
 		service.SettingKeySubscriptionEnabled: "true",
 	})
 

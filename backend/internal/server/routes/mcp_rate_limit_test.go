@@ -36,11 +36,11 @@ func newMCPRateLimitEndpoint(t *testing.T, role string, rpm int) (*gin.Engine, s
 	}
 	token := issueMCPRouteOAuthToken(t, oauth, cfg.MCP.PublicURL, scope, true)
 	h := mcpRouteHandlers()
-	h.MCPOAuth = handler.NewMCPOAuthHandler(oauth, nil, nil, settings, cfg)
+	h.MCPOAuth = handler.NewMCPOAuthHandler(oauth, settings, cfg)
 	h.APIKey = handler.NewAPIKeyHandler(service.NewAPIKeyService(&mcpRouteAPIKeyRepo{}, nil, nil, nil, nil, nil, nil))
 	router := gin.New()
 	RegisterMCPRoutes(router.Group("/api/v1"), h, middleware.AuditLogMiddleware(mcpRouteNext),
-		middleware.StepUpAuthMiddleware(mcpRouteNext), settings, middleware.NewPanelRateLimiter(rdb, settings), nil, rdb)
+		settings, middleware.NewPanelRateLimiter(rdb, settings), nil, rdb)
 	return router, token, mr
 }
 

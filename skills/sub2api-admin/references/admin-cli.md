@@ -88,6 +88,17 @@ node scripts/sub2api-admin.js accounts batch-clear-error --ids 40,39
 
 `bulk-update` 可覆盖页面“批量更新”的字段，payload 由后台表单字段决定，例如 `base_url`、`model_mapping`、`group_ids`、`proxy_id`、`concurrency`、`priority`、`rate_multiplier`、`status`、`compact_mode` 等。更新前先用 `accounts get <id>` 确认字段名。
 
+`accounts create`、`accounts batch-create`、`accounts import-codex-session` 和 `accounts import-data` 都支持 `--proxy-mode`：
+
+```bash
+node scripts/sub2api-admin.js accounts create --file account.json --proxy-mode least_used
+node scripts/sub2api-admin.js accounts batch-create --file accounts.json --proxy-mode random
+node scripts/sub2api-admin.js accounts import-codex-session --file payload.json --proxy-mode least_used
+node scripts/sub2api-admin.js accounts import-data --file accounts-export.json --proxy-mode least_used
+```
+
+取值：`direct`（直连）、`specified`（payload 内提供正数 `proxy_id`）、`random`、`least_used`。自动模式不能同时指定正数 `proxy_id`。`import-data` 的 `--proxy-mode` 只作用于文件里没有 `proxy_key` 的账号，文件内已绑定的代理优先。
+
 ### 导入
 
 通用后台导入：

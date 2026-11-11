@@ -1600,6 +1600,8 @@ export interface OpenAIResponsesState {
   openai_responses_supported?: boolean
 }
 
+export type AccountProxyMode = 'direct' | 'specified' | 'random' | 'least_used'
+
 export interface CreateAccountRequest {
   name: string
   notes?: string | null
@@ -1608,6 +1610,8 @@ export interface CreateAccountRequest {
   credentials: Record<string, unknown>
   extra?: Record<string, unknown>
   proxy_id?: number | null
+  proxy_mode?: AccountProxyMode
+  random_proxy?: boolean
   concurrency?: number
   load_factor?: number | null
   priority?: number
@@ -1755,6 +1759,8 @@ export interface CodexSessionImportRequest {
   notes?: string | null
   group_ids?: number[]
   proxy_id?: number | null
+  proxy_mode?: AccountProxyMode
+  random_proxy?: boolean
   concurrency?: number
   priority?: number
   rate_multiplier?: number

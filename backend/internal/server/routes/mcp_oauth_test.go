@@ -228,12 +228,6 @@ func issueMCPRouteOAuthToken(t *testing.T, oauth *service.MCPOAuthService, resou
 	return tokens.AccessToken
 }
 
-type mcpOAuthRouteStepUpCache struct{ service.TotpCache }
-
-func (mcpOAuthRouteStepUpCache) HasStepUpGrant(_ context.Context, _ int64, session string) (bool, error) {
-	return session == "browser-session", nil
-}
-
 type mcpOAuthHTTPFixture struct {
 	server   *httptest.Server
 	router   *gin.Engine
@@ -255,13 +249,10 @@ func newMCPOAuthHTTPFixture(t *testing.T, role string) *mcpOAuthHTTPFixture {
 	cfg := &config.Config{MCP: config.MCPConfig{PublicURL: base + "/api/v1/mcp"}}
 	cfg.Server.FrontendURL = base
 	cfg.JWT.Secret = "test-jwt-secret-at-least-thirty-two-bytes"
-	settings := service.NewSettingService(&mcpRouteSettingsRepo{values: map[string]string{service.SettingKeyStepUpEnabled: "false"}}, cfg)
+	settings := service.NewSettingService(&mcpRouteSettingsRepo{values: map[string]string{}}, cfg)
 	oauth, repo, users := newMCPRouteOAuthService(role)
-	// Administrator write grants always pass the real step-up gate.
-	users.user.TotpEnabled = true
-	totp := service.NewTotpService(users, nil, mcpOAuthRouteStepUpCache{}, settings, nil, nil)
 	h := mcpRouteHandlers()
-	h.MCPOAuth = handler.NewMCPOAuthHandler(oauth, totp, service.NewUserService(users, nil, nil, nil), settings, cfg)
+	h.MCPOAuth = handler.NewMCPOAuthHandler(oauth, settings, cfg)
 	h.APIKey = handler.NewAPIKeyHandler(service.NewAPIKeyService(&mcpRouteAPIKeyRepo{}, nil, nil, nil, nil, nil, nil))
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -279,7 +270,7 @@ func newMCPOAuthHTTPFixture(t *testing.T, role string) *mcpOAuthHTTPFixture {
 	v1 := router.Group("/api/v1")
 	RegisterUserRoutes(v1, h, browserAuth, middleware.AuditLogMiddleware(mcpRouteNext), settings, nil)
 	RegisterMCPOAuthRoutes(router, v1, h, rdb)
-	RegisterMCPRoutes(v1, h, middleware.AuditLogMiddleware(mcpRouteNext), middleware.StepUpAuthMiddleware(mcpRouteNext), settings, nil, nil, rdb)
+	RegisterMCPRoutes(v1, h, middleware.AuditLogMiddleware(mcpRouteNext), settings, nil, nil, rdb)
 	server.Start()
 	t.Cleanup(server.Close)
 	return &mcpOAuthHTTPFixture{server: server, router: router, resource: cfg.MCP.PublicURL, cfg: cfg, settings: settings, handlers: h, oauth: oauth, repo: repo, users: users}
@@ -455,7 +446,7 @@ func TestMCPOAuthHTTPPermissionAndCredentialBoundaries(t *testing.T) {
 	// cannot become browser REST credentials, even for an administrator owner.
 	rest := gin.New()
 	auth := service.NewAuthService(nil, nil, nil, nil, f.cfg, f.settings, nil, nil, nil, nil, nil, nil, nil)
-	jwtAuth := middleware.NewJWTAuthMiddleware(auth, nil, f.settings, nil)
+	jwtAuth := middleware.NewJWTAuthMiddleware(auth, nil)
 	RegisterUserRoutes(rest.Group("/api/v1"), f.handlers, jwtAuth, middleware.AuditLogMiddleware(mcpRouteNext), f.settings, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/user/mcp/grants", nil)
 	req.Header.Set("Authorization", "Bearer "+admin.AccessToken)

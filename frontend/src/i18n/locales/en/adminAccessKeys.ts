@@ -71,7 +71,7 @@ export default {
   "deleteConfirm": "Delete the key record “{name}”? This removes it from the list only. Historical operation records are retained.",
   "legacy": "Legacy full-access key (migration to scoped keys recommended)",
   "fullAccessLabel": "Full access (legacy administrator key compatibility)",
-  "fullAccessWarning": "This key can access all administrative resources, read sensitive data, and change account and financial settings, including future administrative endpoints. Group, platform, account type, and operation rules no longer restrict this key. Endpoints requiring an administrator browser session or step-up verification keep those requirements.",
+  "fullAccessWarning": "This key can access all administrative resources, read sensitive data, and change account and financial settings, including future administrative endpoints. Group, platform, account type, and operation rules no longer restrict this key. Endpoints that require administrator access keep that requirement.",
   "rulesSuspended": "Resource rules are suspended and resume when full access is disabled. Expiration, IP restrictions, rate limits, and auditing remain active.",
   "fullAccessConfirmTitle": "Confirm full access",
   "fullAccessPhrase": "ENABLE FULL ACCESS",

@@ -41,7 +41,7 @@ func (s *scopedUserResponseService) UpdateUserBalance(context.Context, int64, fl
 func TestScopedAdminUserResponsePreservesFullAdminResponses(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := &scopedUserResponseService{}
-	h := NewUserHandler(svc, nil, nil, nil, nil, nil, nil)
+	h := NewUserHandler(svc, nil, nil, nil)
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Request = c.Request.WithContext(adminaccess.WithPrincipal(c.Request.Context(), &adminaccess.Principal{KeyID: "full", Policy: adminaccess.Policy{FullAccess: true}}))
@@ -73,7 +73,7 @@ func TestScopedAdminUserBalanceReplayRejectsDifferentCredential(t *testing.T) {
 		t.Run(map[bool]string{false: "完整管理员先执行", true: "受限Key先执行"}[scopedFirst], func(t *testing.T) {
 			service.SetDefaultIdempotencyCoordinator(service.NewIdempotencyCoordinator(newMemoryIdempotencyRepoStub(), service.DefaultIdempotencyConfig()))
 			svc := &scopedUserResponseService{}
-			h := NewUserHandler(svc, nil, nil, nil, nil, nil, nil)
+			h := NewUserHandler(svc, nil, nil, nil)
 			r := gin.New()
 			r.Use(func(c *gin.Context) {
 				c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 9})

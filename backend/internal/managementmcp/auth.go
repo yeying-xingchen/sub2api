@@ -92,7 +92,7 @@ func setSubject(c *gin.Context, principal *service.MCPPrincipal) {
 	c.Set(string(middleware.ContextKeyUserRole), principal.Role)
 	c.Set(middleware.ContextKeyAuthEmail, principal.Email)
 	c.Set("auth_method", AuthMethod)
-	// Never share a legacy user's step-up grant with a machine credential.
+	// Keep machine credentials on their own session identity.
 	c.Set(middleware.ContextKeySessionID, "mcp:"+principal.GrantID)
 }
 

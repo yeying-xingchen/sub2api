@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -60,35 +59,20 @@ func (r *handlerMCPSettings) GetValue(_ context.Context, key string) (string, er
 	return r.values[key], nil
 }
 
-type handlerMCPCache struct {
-	service.TotpCache
-	granted bool
-	err     error
-	calls   int
-	userID  int64
-	session string
-}
-
-func (r *handlerMCPCache) HasStepUpGrant(_ context.Context, id int64, session string) (bool, error) {
-	r.calls++
-	r.userID, r.session = id, session
-	return r.granted, r.err
-}
-func newHandlerMCPFixture(t *testing.T) (*MCPOAuthHandler, *handlerMCPRepo, *handlerMCPUsers, *handlerMCPCache) {
+func newHandlerMCPFixture(t *testing.T) (*MCPOAuthHandler, *handlerMCPRepo, *handlerMCPUsers) {
 	t.Helper()
 	cfg := &config.Config{MCP: config.MCPConfig{PublicURL: handlerMCPResource}}
 	cfg.Server.FrontendURL = "https://platform.example.com"
 	repo := &handlerMCPRepo{}
-	users := &handlerMCPUsers{user: &service.User{ID: 7, Role: service.RoleAdmin, Status: service.StatusActive, TotpEnabled: true}}
-	settings := service.NewSettingService(&handlerMCPSettings{values: map[string]string{service.SettingKeyStepUpEnabled: "true"}}, cfg)
-	cache := &handlerMCPCache{}
-	totp := service.NewTotpService(users, nil, cache, settings, nil, nil)
+	users := &handlerMCPUsers{user: &service.User{ID: 7, Role: service.RoleAdmin, Status: service.StatusActive}}
+	settings := service.NewSettingService(&handlerMCPSettings{values: map[string]string{}}, cfg)
 	oauth := service.NewMCPOAuthService(repo, users)
 	client, err := oauth.Register(context.Background(), service.MCPOAuthRegisterInput{ClientName: "Example assistant", RedirectURIs: []string{"https://client.example.com/callback?workspace=one"}})
 	require.NoError(t, err)
 	repo.clientID, repo.reads = client.ClientID, 0
-	return NewMCPOAuthHandler(oauth, totp, service.NewUserService(users, nil, nil, nil), settings, cfg), repo, users, cache
+	return NewMCPOAuthHandler(oauth, settings, cfg), repo, users
 }
+
 func handlerMCPContext(t *testing.T, method, target, body, contentType string) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -146,7 +130,7 @@ func TestMCPOAuthHandlerResourceURLTrustedConfiguration(t *testing.T) {
 			if tt.stored != "" {
 				settings = service.NewSettingService(&handlerMCPSettings{values: map[string]string{service.SettingKeyFrontendURL: tt.stored}}, cfg)
 			}
-			h := NewMCPOAuthHandler(nil, nil, nil, settings, cfg)
+			h := NewMCPOAuthHandler(nil, settings, cfg)
 			got, err := h.ResourceURL(context.Background())
 			if tt.want == "" {
 				require.Error(t, err)
@@ -160,7 +144,7 @@ func TestMCPOAuthHandlerResourceURLTrustedConfiguration(t *testing.T) {
 }
 
 func TestMCPOAuthHandlerMetadataRawAndHostIndependent(t *testing.T) {
-	h, _, _, _ := newHandlerMCPFixture(t)
+	h, _, _ := newHandlerMCPFixture(t)
 	for _, auth := range []bool{false, true} {
 		c, rec := handlerMCPContext(t, http.MethodGet, "https://attacker.example/.well-known/oauth-authorization-server", "", "")
 		c.Request.Header.Set("X-Forwarded-Host", "forwarded-attacker.example")
@@ -190,7 +174,7 @@ func TestMCPOAuthHandlerMetadataRawAndHostIndependent(t *testing.T) {
 			require.Equal(t, []any{"header"}, body["bearer_methods_supported"])
 		}
 	}
-	h = NewMCPOAuthHandler(nil, nil, nil, nil, &config.Config{})
+	h = NewMCPOAuthHandler(nil, nil, &config.Config{})
 	for _, serve := range []gin.HandlerFunc{h.ResourceMetadata, h.AuthorizationMetadata} {
 		c, rec := handlerMCPContext(t, http.MethodGet, "https://attacker.example/metadata", "", "")
 		serve(c)
@@ -201,7 +185,7 @@ func TestMCPOAuthHandlerMetadataRawAndHostIndependent(t *testing.T) {
 }
 
 func TestMCPOAuthHandlerConnectionConfigUsesCanonicalResource(t *testing.T) {
-	h, repo, _, _ := newHandlerMCPFixture(t)
+	h, repo, _ := newHandlerMCPFixture(t)
 	c, rec := handlerMCPContext(t, http.MethodGet, "https://attacker.example/user/mcp/config", "", "")
 	c.Request.Header.Set("X-Forwarded-Host", "forwarded-attacker.example")
 	handlerMCPSubject(c, service.RoleUser)
@@ -213,7 +197,7 @@ func TestMCPOAuthHandlerConnectionConfigUsesCanonicalResource(t *testing.T) {
 	require.Zero(t, repo.reads)
 	require.Zero(t, repo.writes)
 
-	h = NewMCPOAuthHandler(nil, nil, nil, nil, &config.Config{})
+	h = NewMCPOAuthHandler(nil, nil, &config.Config{})
 	c, rec = handlerMCPContext(t, http.MethodGet, "/user/mcp/config", "", "")
 	handlerMCPSubject(c, service.RoleUser)
 	h.ConnectionConfig(c)
@@ -234,7 +218,7 @@ func TestMCPOAuthHandlerAuthorizationMetadataValidatesFrontendURL(t *testing.T) 
 		t.Run(tt.frontend, func(t *testing.T) {
 			cfg := &config.Config{MCP: config.MCPConfig{PublicURL: handlerMCPResource}}
 			cfg.Server.FrontendURL = tt.frontend
-			h := NewMCPOAuthHandler(nil, nil, nil, nil, cfg)
+			h := NewMCPOAuthHandler(nil, nil, cfg)
 			c, rec := handlerMCPContext(t, http.MethodGet, "https://attacker.example/metadata", "", "")
 			h.AuthorizationMetadata(c)
 			if tt.want == "" {
@@ -317,7 +301,7 @@ func TestMCPOAuthHandlerTokenEndpointsRejectConfidentialAuthentication(t *testin
 	for _, endpoint := range []string{"token", "revoke"} {
 		for _, auth := range []string{"authorization", "client_secret"} {
 			t.Run(endpoint+"/"+auth, func(t *testing.T) {
-				h, repo, _, _ := newHandlerMCPFixture(t)
+				h, repo, _ := newHandlerMCPFixture(t)
 				values := url.Values{"client_id": {"client-1"}}
 				if auth == "client_secret" {
 					values.Set("client_secret", "not-supported")
@@ -341,7 +325,7 @@ func TestMCPOAuthHandlerTokenEndpointsRejectConfidentialAuthentication(t *testin
 }
 
 func TestMCPOAuthHandlerPreviewFrontendContract(t *testing.T) {
-	h, repo, _, _ := newHandlerMCPFixture(t)
+	h, repo, _ := newHandlerMCPFixture(t)
 	input := handlerMCPAuthorization(repo.clientID)
 	query := url.Values{"response_type": {input.ResponseType}, "client_id": {input.ClientID}, "redirect_uri": {input.RedirectURI}, "scope": {input.Scope}, "state": {input.State}, "code_challenge": {input.CodeChallenge}, "code_challenge_method": {input.CodeChallengeMethod}, "resource": {input.Resource}, "timezone": {"Asia/Shanghai"}}
 	c, rec := handlerMCPContext(t, http.MethodGet, "/user/mcp/authorize?"+query.Encode(), "", "")
@@ -364,69 +348,38 @@ func TestMCPOAuthHandlerPreviewFrontendContract(t *testing.T) {
 func TestMCPOAuthHandlerAdminDecisionGatesBeforePersistence(t *testing.T) {
 	for _, tt := range []struct {
 		name, role, authMethod, marker string
-		totp, granted                  bool
-		cacheErr                       error
 		status                         int
 	}{
-		{name: "non-admin", role: service.RoleUser, totp: true, granted: true, status: 403, marker: "Only administrators"},
-		{name: "missing role", totp: true, granted: true, status: 403, marker: "Only administrators"},
-		{name: "TOTP disabled", role: service.RoleAdmin, status: 403, marker: "STEP_UP_TOTP_NOT_ENABLED"},
-		{name: "no recent grant", role: service.RoleAdmin, totp: true, status: 403, marker: "STEP_UP_REQUIRED"},
-		{name: "step-up unavailable", role: service.RoleAdmin, totp: true, cacheErr: errors.New("cache unavailable"), status: 503, marker: "STEP_UP_UNAVAILABLE"},
-		{name: "admin API key", role: service.RoleAdmin, authMethod: service.AuditAuthMethodAdminAPIKey, totp: true, granted: true, status: 403, marker: "STEP_UP_ADMIN_API_KEY_FORBIDDEN"},
-		{name: "MCP credential", role: service.RoleAdmin, authMethod: service.AuditAuthMethodMCPOAuth, totp: true, granted: true, status: 403, marker: "STEP_UP_MCP_OAUTH_FORBIDDEN"},
+		{name: "non-admin", role: service.RoleUser, status: 403, marker: "Only administrators"},
+		{name: "missing role", status: 403, marker: "Only administrators"},
+		{name: "admin", role: service.RoleAdmin, status: 200},
+		{name: "admin API key", role: service.RoleAdmin, authMethod: service.AuditAuthMethodAdminAPIKey, status: 200},
+		{name: "MCP credential", role: service.RoleAdmin, authMethod: service.AuditAuthMethodMCPOAuth, status: 200},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			h, repo, users, cache := newHandlerMCPFixture(t)
-			users.user.TotpEnabled = tt.totp
-			cache.granted, cache.err = tt.granted, tt.cacheErr
+			h, repo, _ := newHandlerMCPFixture(t)
 			input := service.MCPOAuthConsentInput{Authorization: handlerMCPAuthorization(repo.clientID), Approved: true, Scope: service.MCPScopeAdmin}
 			c, rec := handlerMCPContext(t, http.MethodPost, "/user/mcp/authorize", handlerMCPBody(t, input), "application/json")
 			handlerMCPSubject(c, tt.role)
 			c.Set("auth_method", tt.authMethod)
 			h.Decide(c)
 			require.Equal(t, tt.status, rec.Code)
-			require.Contains(t, rec.Body.String(), tt.marker)
-			require.Zero(t, repo.reads)
-			require.Zero(t, repo.writes)
+			if tt.marker != "" {
+				require.Contains(t, rec.Body.String(), tt.marker)
+			}
+			if tt.status == http.StatusOK {
+				require.Equal(t, 1, repo.writes)
+			} else {
+				require.Zero(t, repo.reads)
+				require.Zero(t, repo.writes)
+			}
 			require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 		})
 	}
 }
 
-func TestMCPOAuthHandlerAdminWriteAlwaysRequiresStepUp(t *testing.T) {
-	for _, tt := range []struct {
-		name           string
-		readOnly       *bool
-		totp, granted  bool
-		status, writes int
-		marker         string
-	}{
-		{name: "write without TOTP", readOnly: boolPtr(false), status: 403, marker: "STEP_UP_TOTP_NOT_ENABLED"},
-		{name: "write without recent verification", readOnly: boolPtr(false), totp: true, status: 403, marker: "STEP_UP_REQUIRED"},
-		{name: "verified write", readOnly: boolPtr(false), totp: true, granted: true, status: 200, writes: 1},
-		{name: "read-only follows the switch", readOnly: boolPtr(true), status: 200, writes: 1},
-		{name: "default read-only follows the switch", status: 200, writes: 1},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			h, repo, users, cache := newHandlerMCPFixture(t)
-			// Global step-up is disabled; write grants still need verification.
-			h.settings = service.NewSettingService(&handlerMCPSettings{values: map[string]string{service.SettingKeyStepUpEnabled: "false"}}, h.cfg)
-			users.user.TotpEnabled = tt.totp
-			cache.granted = tt.granted
-			input := service.MCPOAuthConsentInput{Authorization: handlerMCPAuthorization(repo.clientID), Approved: true, Scope: service.MCPScopeAdmin, ReadOnly: tt.readOnly}
-			c, rec := handlerMCPContext(t, http.MethodPost, "/user/mcp/authorize", handlerMCPBody(t, input), "application/json")
-			handlerMCPSubject(c, service.RoleAdmin)
-			h.Decide(c)
-			require.Equal(t, tt.status, rec.Code, rec.Body.String())
-			require.Contains(t, rec.Body.String(), tt.marker)
-			require.Equal(t, tt.writes, repo.writes)
-		})
-	}
-}
-
 func TestMCPOAuthHandlerRegistrationPersistsNothing(t *testing.T) {
-	h, repo, _, _ := newHandlerMCPFixture(t)
+	h, repo, _ := newHandlerMCPFixture(t)
 	c, rec := handlerMCPContext(t, http.MethodPost, "/api/v1/mcp/oauth/register", `{"client_name":"Example assistant","redirect_uris":["https://client.example.com/cb"]}`, "application/json")
 	h.Register(c)
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
@@ -438,17 +391,14 @@ func TestMCPOAuthHandlerRegistrationPersistsNothing(t *testing.T) {
 	require.Zero(t, repo.writes)
 }
 
-func TestMCPOAuthHandlerAdminApprovalUsesBrowserSession(t *testing.T) {
-	h, repo, _, cache := newHandlerMCPFixture(t)
-	cache.granted = true
+func TestMCPOAuthHandlerAdminApprovalWithoutTOTP(t *testing.T) {
+	h, repo, _ := newHandlerMCPFixture(t)
 	readOnly := false
 	input := service.MCPOAuthConsentInput{Authorization: handlerMCPAuthorization(repo.clientID), Approved: true, Scope: service.MCPScopeAdmin, ReadOnly: &readOnly}
 	c, rec := handlerMCPContext(t, http.MethodPost, "/user/mcp/authorize", handlerMCPBody(t, input), "application/json")
 	handlerMCPSubject(c, service.RoleAdmin)
 	h.Decide(c)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, int64(7), cache.userID)
-	require.Equal(t, "browser-session-7", cache.session)
 	require.Equal(t, 1, repo.writes)
 	require.Equal(t, service.MCPScopeAdmin, repo.grant.Scope)
 	require.False(t, repo.grant.ReadOnly)
@@ -462,15 +412,13 @@ func TestMCPOAuthHandlerAdminApprovalUsesBrowserSession(t *testing.T) {
 	require.Empty(t, rec.Header().Get("Location"), "return a validated URL without an automatic HTTP redirect")
 }
 
-func TestMCPOAuthHandlerDenialSkipsStepUpAndPersistence(t *testing.T) {
-	h, repo, _, cache := newHandlerMCPFixture(t)
-	cache.err = errors.New("must not be called")
+func TestMCPOAuthHandlerDenialSkipsPersistence(t *testing.T) {
+	h, repo, _ := newHandlerMCPFixture(t)
 	input := service.MCPOAuthConsentInput{Authorization: handlerMCPAuthorization(repo.clientID), Approved: false, Scope: service.MCPScopeAdmin}
 	c, rec := handlerMCPContext(t, http.MethodPost, "/user/mcp/authorize", handlerMCPBody(t, input), "application/json")
 	handlerMCPSubject(c, service.RoleUser)
 	h.Decide(c)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Zero(t, cache.calls)
 	require.Zero(t, repo.writes)
 	result := handlerMCPJSON(t, rec)["data"].(map[string]any)
 	destination, err := url.Parse(result["redirect_url"].(string))
@@ -482,7 +430,7 @@ func TestMCPOAuthHandlerDenialSkipsStepUpAndPersistence(t *testing.T) {
 }
 
 func TestMCPOAuthHandlerBrowserEndpointsRequireSession(t *testing.T) {
-	h, repo, _, _ := newHandlerMCPFixture(t)
+	h, repo, _ := newHandlerMCPFixture(t)
 	for _, serve := range []gin.HandlerFunc{h.ConnectionConfig, h.Preview, h.Decide, h.ListGrants, h.RevokeGrant} {
 		c, rec := handlerMCPContext(t, http.MethodPost, "/user/mcp", `{}`, "application/json")
 		serve(c)

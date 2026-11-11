@@ -479,6 +479,16 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 }
 
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
+	if input.ProxyMode != "" {
+		needsTx, err := s.prepareCreateAccountProxy(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		if needsTx {
+			return s.createAccountWithAutoProxyTx(ctx, input)
+		}
+	}
+
 	accountExtra, err := normalizeOpenAILongContextBillingExtra(input.Platform, input.Extra)
 	if err != nil {
 		return nil, err
@@ -577,6 +587,16 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 }
 
 func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *UpdateAccountInput) (*Account, error) {
+	if input.ProxyMode != "" {
+		needsTx, err := s.prepareUpdateAccountProxy(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		if needsTx {
+			return s.updateAccountWithAutoProxyTx(ctx, id, input)
+		}
+	}
+
 	account, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err

@@ -153,8 +153,8 @@ func (s *PasskeyService) requireEnabled() error {
 
 // verifyPasskeyPassword gates credential enrollment and revocation with the
 // account password so a hijacked session cannot silently add or remove
-// passkeys. The password is used instead of TOTP step-up so the guard also
-// works on deployments without a TOTP encryption key configured.
+// passkeys. The password is used so the guard also works on deployments
+// without a TOTP encryption key configured.
 func verifyPasskeyPassword(user *User, password string) error {
 	if password == "" {
 		return ErrPasswordRequired

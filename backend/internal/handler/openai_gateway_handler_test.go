@@ -2281,7 +2281,9 @@ func TestOpenAIResponses_APIKeyPassthroughPool5xxRetriesThenExhaustsMaxSwitches(
 
 	h.Responses(c)
 
-	require.Equal(t, []int64{9910, 9910, 9911}, upstream.calls())
+	// 9910 为池模式：按 pool_mode_retry_count=1 同账号重试 1 次；
+	// 9911 为非池模式：临时 5xx 按默认预算同账号重试 3 次后才耗尽切换次数。
+	require.Equal(t, []int64{9910, 9910, 9911, 9911, 9911, 9911}, upstream.calls())
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Equal(t, "upstream_error", gjson.GetBytes(rec.Body.Bytes(), "error.type").String())
 	require.Equal(t, "Upstream service temporarily unavailable", gjson.GetBytes(rec.Body.Bytes(), "error.message").String())

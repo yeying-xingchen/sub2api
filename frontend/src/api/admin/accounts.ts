@@ -8,6 +8,7 @@ import type { OpenAIReferralRefreshResult, OpenAIReferralSendResult } from '@/ty
 import type {
   Account,
   AccountListItem,
+  AccountProxyMode,
   CreateAccountRequest,
   UpdateAccountRequest,
   PaginatedResponse,
@@ -759,10 +760,16 @@ export async function exportData(options?: {
 export async function importData(payload: {
   data: AdminDataPayload
   skip_default_group_bind?: boolean
+  proxy_mode?: AccountProxyMode
+  proxy_id?: number | null
+  random_proxy?: boolean
 }): Promise<AdminDataImportResult> {
   const { data } = await apiClient.post<AdminDataImportResult>('/admin/accounts/data', {
     data: payload.data,
-    skip_default_group_bind: payload.skip_default_group_bind
+    skip_default_group_bind: payload.skip_default_group_bind,
+    proxy_mode: payload.proxy_mode,
+    proxy_id: payload.proxy_id,
+    random_proxy: payload.random_proxy
   })
   return data
 }

@@ -172,3 +172,41 @@ func TestNormalizeAccountProxySelectionConflicts(t *testing.T) {
 		}
 	}
 }
+
+func TestPrepareCreateAndUpdateAccountProxyModes(t *testing.T) {
+	proxy := &scopedSelectionProxyRepo{id: 7}
+	s := &adminServiceImpl{proxyRepo: proxy}
+	txctx := dbent.NewTxContext(context.Background(), &dbent.Tx{})
+
+	createAuto := &CreateAccountInput{ProxyMode: "least_used"}
+	needsTx, err := s.prepareCreateAccountProxy(txctx, createAuto)
+	require.NoError(t, err)
+	require.False(t, needsTx)
+	require.NotNil(t, createAuto.ProxyID)
+	require.EqualValues(t, 7, *createAuto.ProxyID)
+	require.Empty(t, createAuto.ProxyMode)
+
+	createAutoNoTx := &CreateAccountInput{ProxyMode: "random"}
+	needsTx, err = s.prepareCreateAccountProxy(context.Background(), createAutoNoTx)
+	require.NoError(t, err)
+	require.True(t, needsTx)
+	require.Nil(t, createAutoNoTx.ProxyID)
+	require.Equal(t, "random", createAutoNoTx.ProxyMode)
+
+	createDirect := &CreateAccountInput{ProxyMode: "direct"}
+	needsTx, err = s.prepareCreateAccountProxy(context.Background(), createDirect)
+	require.NoError(t, err)
+	require.False(t, needsTx)
+	require.Nil(t, createDirect.ProxyID)
+
+	updateDirect := &UpdateAccountInput{ProxyMode: "direct"}
+	needsTx, err = s.prepareUpdateAccountProxy(context.Background(), updateDirect)
+	require.NoError(t, err)
+	require.False(t, needsTx)
+	require.NotNil(t, updateDirect.ProxyID)
+	require.Zero(t, *updateDirect.ProxyID)
+
+	conflictID := int64(3)
+	_, err = s.prepareCreateAccountProxy(txctx, &CreateAccountInput{ProxyMode: "random", ProxyID: &conflictID})
+	require.Error(t, err)
+}

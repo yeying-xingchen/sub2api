@@ -25,7 +25,6 @@ vi.mock('@/composables/useClipboard', () => ({
   useClipboard: () => ({ copyToClipboard: vi.fn() })
 }))
 
-// useStepUp pulls in the API client, which needs the real i18n instance.
 vi.mock('vue-i18n', async (importOriginal) => ({
   ...(await importOriginal<typeof import('vue-i18n')>()),
   useI18n: () => ({
@@ -47,8 +46,7 @@ const mountModal = (concurrency: number) => mount(UserEditModal, {
       },
       Select: true,
       Icon: true,
-      UserAttributeForm: true,
-      TotpStepUpDialog: true
+      UserAttributeForm: true
     }
   }
 })

@@ -39,7 +39,7 @@ func adminAuth(
 		//   Sec-WebSocket-Protocol: sub2api-admin, jwt.<token>
 		if isWebSocketUpgradeRequest(c) {
 			if token := extractJWTFromWebSocketSubprotocol(c); token != "" {
-				if !validateJWTForAdmin(c, token, authService, userService, settingService, auditService) {
+				if !validateJWTForAdmin(c, token, authService, userService) {
 					return
 				}
 				c.Next()
@@ -77,7 +77,7 @@ func adminAuth(
 					AbortWithError(c, 401, "UNAUTHORIZED", "Authorization required")
 					return
 				}
-				if !validateJWTForAdmin(c, token, authService, userService, settingService, auditService) {
+				if !validateJWTForAdmin(c, token, authService, userService) {
 					return
 				}
 				c.Next()
@@ -170,8 +170,6 @@ func validateJWTForAdmin(
 	token string,
 	authService *service.AuthService,
 	userService *service.UserService,
-	settingService *service.SettingService,
-	auditService *service.AuditLogService,
 ) bool {
 	// 验证 JWT token
 	claims, err := authService.ValidateToken(token)
@@ -204,11 +202,6 @@ func validateJWTForAdmin(
 	// 校验 TokenVersion，确保管理员改密后旧 token 失效
 	if claims.TokenVersion != user.TokenVersion {
 		AbortWithError(c, 401, "TOKEN_REVOKED", "Token has been revoked (password changed)")
-		return false
-	}
-
-	// 会话绑定校验：IP/UA 任一变化即撤销会话（功能可在系统设置中关闭）
-	if !enforceSessionBinding(c, authService, settingService, auditService, claims) {
 		return false
 	}
 

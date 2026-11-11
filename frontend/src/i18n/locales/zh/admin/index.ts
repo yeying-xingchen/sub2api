@@ -7,6 +7,8 @@ import settings from './settings'
 import audit from './audit'
 import promptAudit from './promptAudit'
 import plugins from './plugins'
+import codexTickets from './codexTickets'
+import pelicanTests from './pelicanTests'
 
 export default {
   ...overview,
@@ -18,4 +20,6 @@ export default {
   ...audit,
   ...promptAudit,
   ...plugins,
+  ...codexTickets,
+  ...pelicanTests,
 }

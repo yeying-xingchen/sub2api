@@ -386,6 +386,7 @@ func (s *adminServiceImpl) scopedAdminCreateTransaction(ctx context.Context, inp
 	if err != nil {
 		return nil, err
 	}
+	safe.ProxyMode = ""
 	// 创建以 NULL 表示直连；更新接口的 0 仅是清除既有绑定的指令。
 	if safe.ProxyID != nil && *safe.ProxyID == 0 {
 		safe.ProxyID = nil

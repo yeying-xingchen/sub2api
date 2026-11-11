@@ -6,11 +6,9 @@ import en from '@/i18n/locales/en/adminAccessKeys'
 import { createI18n } from 'vue-i18n'
 const mountSettings = () => mount(AdminAccessKeysSettings, { global: { plugins: [createI18n({ legacy: false, locale: 'zh', messages: { zh: { adminAccessKeys: zh }, en: { adminAccessKeys: en } } })], stubs: { teleport: true } } })
 import { getAllIncludingInactive } from '@/api/admin/groups'
-const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), rotate: vi.fn(), revoke: vi.fn(), deleteRecord: vi.fn(), stepUp: vi.fn((fn: () => unknown) => fn()) }))
+const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), rotate: vi.fn(), revoke: vi.fn(), deleteRecord: vi.fn() }))
 vi.mock('@/api/admin/adminAccessKeys', () => mocks)
 vi.mock('@/api/admin/groups', () => ({ getAllIncludingInactive: vi.fn().mockResolvedValue([{ id: 7, name: '测试分组' }]) }))
-vi.mock('@/components/auth/TotpStepUpDialog.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('@/composables/useStepUp', () => ({ useStepUp: () => ({ run: mocks.stepUp }), isStepUpCancelled: () => false }))
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getAllIncludingInactive).mockResolvedValue([{ id: 7, name: '测试分组' }] as Awaited<ReturnType<typeof getAllIncludingInactive>>)
@@ -69,7 +67,6 @@ describe('管理员受限密钥配置', () => {
     expect(input.policy.rules[0].permissions).toEqual([])
     expect(input.policy.rules[0].account_types).toEqual([])
     expect(input.policy.rules[0].group_ids).toEqual([7])
-    expect(mocks.stepUp).toHaveBeenCalledOnce()
     expect(wrapper.text()).toContain('once-secret')
     await wrapper.get('[data-test="dismiss-secret"]').trigger('click')
     expect(wrapper.text()).not.toContain('once-secret')
@@ -117,7 +114,6 @@ describe('管理员受限密钥配置', () => {
     expect(wrapper.text()).toContain('adm_sc_1')
     expect(wrapper.text()).toContain('已撤销')
     expect(wrapper.findAll('button').some(button => button.text() === '删除记录')).toBe(true)
-    expect(mocks.stepUp).toHaveBeenCalledTimes(5)
     vi.restoreAllMocks()
   })
 
@@ -151,7 +147,6 @@ describe('管理员受限密钥配置', () => {
       resolve({ message: 'ok' })
       await flushPromises()
       expect(mocks.deleteRecord).toHaveBeenLastCalledWith(item.id)
-      expect(mocks.stepUp).toHaveBeenCalledTimes(2)
       expect(wrapper.text()).not.toContain('revoked-prefix')
       expect(wrapper.text()).toContain('历史操作记录仍会继续保留')
     } finally {

@@ -266,6 +266,8 @@ func newOpenAISilentRefusalFailoverError(c *gin.Context, account *Account, upstr
 		StatusCode:      http.StatusBadGateway,
 		ResponseBody:    openAISilentRefusalErrorBody(),
 		ResponseHeaders: headers,
+		// 空响应/静默拒答是账号级结果，重打同一账号通常得到相同结果，直接换号。
+		DisableSameAccountRetry: true,
 	}
 }
 
@@ -305,6 +307,8 @@ func newOpenAIResponsesEmptyCompletedFailoverError(c *gin.Context, account *Acco
 		StatusCode:      http.StatusBadGateway,
 		ResponseBody:    openAISilentRefusalErrorBody(),
 		ResponseHeaders: headers,
+		// 空响应/静默拒答是账号级结果，重打同一账号通常得到相同结果，直接换号。
+		DisableSameAccountRetry: true,
 	}
 }
 

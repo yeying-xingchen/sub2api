@@ -129,7 +129,7 @@ func (p *PanelRateLimiter) userScoped(scope string, limitOf func(service.PanelRa
 }
 
 // PublicIP 无需认证的公开接口按客户端 IP 限流。
-// 使用与审计日志/会话绑定一致的安全客户端 IP 解析；解析结果为回环/内网/
+// 使用与审计日志一致的安全客户端 IP 解析；解析结果为回环/内网/
 // 链路本地地址时跳过计数（这类地址通常是反代内部转发地址，按它计数会把
 // 整条反代链路的所有真实用户合并进同一个桶造成大面积误拦截）。
 func (p *PanelRateLimiter) PublicIP() gin.HandlerFunc {

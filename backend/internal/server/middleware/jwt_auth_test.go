@@ -62,7 +62,7 @@ func newJWTTestEnv(users map[int64]*service.User) (*gin.Engine, *service.AuthSer
 	userRepo := &stubJWTUserRepo{users: users}
 	authSvc := service.NewAuthService(nil, userRepo, nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
 	userSvc := service.NewUserService(userRepo, nil, nil, nil)
-	mw := NewJWTAuthMiddleware(authSvc, userSvc, nil, nil)
+	mw := NewJWTAuthMiddleware(authSvc, userSvc)
 
 	r := gin.New()
 	r.Use(gin.HandlerFunc(mw))
@@ -148,7 +148,7 @@ func TestJWTAuth_ValidToken_TouchesLastActive(t *testing.T) {
 	toucher := &recordingActivityToucher{}
 
 	r := gin.New()
-	r.Use(jwtAuth(authSvc, userSvc, toucher, nil, nil))
+	r.Use(jwtAuth(authSvc, userSvc, toucher))
 	r.GET("/protected", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -259,7 +259,7 @@ func TestJWTAuth_UserLookupErrors(t *testing.T) {
 				handler   gin.HandlerFunc
 				websocket bool
 			}{
-				{"user", gin.HandlerFunc(NewJWTAuthMiddleware(authSvc, userSvc, nil, nil)), false},
+				{"user", gin.HandlerFunc(NewJWTAuthMiddleware(authSvc, userSvc)), false},
 				{"admin", gin.HandlerFunc(NewAdminAuthMiddleware(authSvc, userSvc, nil, nil)), false},
 				{"admin websocket", gin.HandlerFunc(NewAdminAuthMiddleware(authSvc, userSvc, nil, nil)), true},
 			} {

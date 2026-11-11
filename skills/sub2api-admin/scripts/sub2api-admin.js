@@ -11,8 +11,8 @@ function usage() {
   console.log(`Usage:
   sub2api-admin.js accounts list [--page-size 200] [--page N] [--search TEXT] [--platform openai] [--type oauth] [--status active] [--group NAME] [--privacy-mode MODE] [--sort-by name] [--sort-order asc]
   sub2api-admin.js accounts export [--ids 1,2] [--file accounts.json] [--include-proxies false] [list filters...]
-  sub2api-admin.js accounts import-data --file accounts.json [--skip-default-group-bind]
-  sub2api-admin.js accounts create --json '{...}' | --file account.json
+  sub2api-admin.js accounts import-data --file accounts.json [--skip-default-group-bind] [--proxy-mode <direct|specified|random|least_used>]
+  sub2api-admin.js accounts create --json '{...}' | --file account.json [--proxy-mode <direct|specified|random|least_used>]
   sub2api-admin.js accounts update <id> --json '{...}' | --file patch.json
   sub2api-admin.js accounts get <id>
   sub2api-admin.js accounts delete <id>
@@ -32,7 +32,7 @@ function usage() {
   sub2api-admin.js accounts models <id>
   sub2api-admin.js accounts sync-models <id>
   sub2api-admin.js accounts apply-oauth <id> --json '{...}' | --file credentials.json
-  sub2api-admin.js accounts batch-create --file accounts.json
+  sub2api-admin.js accounts batch-create --file accounts.json [--proxy-mode <direct|specified|random|least_used>]
   sub2api-admin.js accounts batch-update-credentials --json '{...}' | --file payload.json
   sub2api-admin.js accounts bulk-update --ids 1,2 --json '{...}' | --file patch.json
   sub2api-admin.js accounts batch-refresh --ids 1,2
@@ -41,7 +41,7 @@ function usage() {
   sub2api-admin.js accounts reset-temp-unschedulable <id>
   sub2api-admin.js accounts crs-preview --json '{...}' | --file payload.json
   sub2api-admin.js accounts crs-sync --json '{...}' | --file payload.json
-  sub2api-admin.js accounts import-codex-session --json '{...}' | --file payload.json
+  sub2api-admin.js accounts import-codex-session --json '{...}' | --file payload.json [--proxy-mode <direct|specified|random|least_used>]
   sub2api-admin.js accounts antigravity-default-model-mapping
   sub2api-admin.js accounts import-json --file <path> --template-name <name> [--skip-name <name>] [--dry-run]
   sub2api-admin.js groups all
@@ -232,6 +232,24 @@ function readJsonPayload(flags, { required = true } = {}) {
   return undefined;
 }
 
+const ACCOUNT_PROXY_MODES = new Set(["direct", "specified", "random", "least_used"]);
+
+// 把 --proxy-mode 写入请求；数组与 {accounts:[...]} 会逐条写入，其余作为顶层参数。
+function applyProxyMode(payload, flags) {
+  const mode = flags["proxy-mode"];
+  if (mode === undefined) return payload;
+  if (!ACCOUNT_PROXY_MODES.has(mode)) {
+    throw new Error("--proxy-mode must be direct, specified, random or least_used");
+  }
+  if (Array.isArray(payload)) {
+    return payload.map((item) => ({ ...item, proxy_mode: mode }));
+  }
+  if (payload && typeof payload === "object" && Array.isArray(payload.accounts)) {
+    return { ...payload, accounts: payload.accounts.map((item) => ({ ...item, proxy_mode: mode })) };
+  }
+  return { ...payload, proxy_mode: mode };
+}
+
 function accountListOptions(flags) {
   return {
     page: Number(flags.page || 1),
@@ -329,16 +347,16 @@ async function commandAccounts(args) {
   if (sub === "import-data") {
     const file = args.flags.file;
     if (!file) throw new Error("accounts import-data requires --file");
-    const payload = {
+    const payload = applyProxyMode({
       data: JSON.parse(fs.readFileSync(path.resolve(file), "utf8")),
       skip_default_group_bind: Boolean(args.flags["skip-default-group-bind"]),
-    };
+    }, args.flags);
     printJson(await adminRequest("POST", "/admin/accounts/data", payload));
     return;
   }
 
   if (sub === "create") {
-    printJson(await adminRequest("POST", "/admin/accounts", readJsonPayload(args.flags)));
+    printJson(await adminRequest("POST", "/admin/accounts", applyProxyMode(readJsonPayload(args.flags), args.flags)));
     return;
   }
 
@@ -457,7 +475,7 @@ async function commandAccounts(args) {
   }
 
   if (sub === "batch-create") {
-    const payload = readJsonPayload(args.flags);
+    const payload = applyProxyMode(readJsonPayload(args.flags), args.flags);
     const accounts = Array.isArray(payload) ? payload : payload.accounts;
     if (!Array.isArray(accounts)) throw new Error("batch-create payload must be an array or {accounts:[...]}");
     printJson(await adminRequest("POST", "/admin/accounts/batch", { accounts }));
@@ -514,7 +532,7 @@ async function commandAccounts(args) {
   }
 
   if (sub === "import-codex-session") {
-    printJson(await adminRequest("POST", "/admin/accounts/import/codex-session", readJsonPayload(args.flags)));
+    printJson(await adminRequest("POST", "/admin/accounts/import/codex-session", applyProxyMode(readJsonPayload(args.flags), args.flags)));
     return;
   }
 

@@ -1060,3 +1060,116 @@ describe('CreateAccountModal Vertex API key auth', () => {
     expect(wrapper.find('[data-testid="vertex-api-key-input"]').exists()).toBe(false)
   })
 })
+
+const NativeSelectStub = defineComponent({
+  name: 'NativeSelectStub',
+  props: {
+    modelValue: { type: [String, Number, Boolean, Object], default: null },
+    options: { type: Array, default: () => [] }
+  },
+  emits: ['update:modelValue'],
+  template: `
+    <select
+      v-bind="$attrs"
+      :value="modelValue"
+      @change="$emit('update:modelValue', $event.target.value)"
+    >
+      <option v-for="option in options" :key="option.value" :value="option.value">
+        {{ option.label }}
+      </option>
+    </select>
+  `
+})
+
+function mountModalWithNativeSelects(proxies: any[] = []) {
+  return mount(CreateAccountModal, {
+    props: { show: true, proxies, groups: [] },
+    global: {
+      stubs: {
+        BaseDialog: BaseDialogStub,
+        OAuthAuthorizationFlow: OAuthAuthorizationFlowStub,
+        ConfirmDialog: true,
+        Select: NativeSelectStub,
+        Icon: true,
+        PlatformIcon: true,
+        ProxySelector: true,
+        ProxyAdBanner: true,
+        GroupSelector: GroupSelectorStub,
+        ModelWhitelistSelector: ModelWhitelistSelectorStub,
+        QuotaLimitCard: true
+      }
+    }
+  })
+}
+
+describe('CreateAccountModal proxy assignment', () => {
+  const proxies = [
+    { id: 1, name: 'busy', status: 'active', account_count: 5, expires_at: null },
+    { id: 2, name: 'idle', status: 'active', account_count: 0, expires_at: null },
+    { id: 3, name: 'off', status: 'inactive', account_count: 0, expires_at: null }
+  ]
+
+  beforeEach(() => {
+    authIsSimpleMode.value = true
+    createAccountMock.mockReset().mockResolvedValue({ id: 50, platform: 'openai', type: 'apikey' })
+    probeUpstreamBillingMock.mockReset().mockResolvedValue({})
+    syncUpstreamModelsMock.mockReset().mockResolvedValue({ models: [], metadata: {} })
+    showWarningMock.mockReset()
+  })
+
+  it('sends server-side auto proxy mode for non-OAuth creation', async () => {
+    const wrapper = mountModalWithNativeSelects(proxies)
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('auto proxy account')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('sk-test')
+    await wrapper.get('[data-testid="proxy-assignment"]').setValue('least_used')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    const payload = createAccountMock.mock.calls[0]?.[0]
+    expect(payload?.proxy_mode).toBe('least_used')
+    expect(payload?.proxy_id).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('keeps direct mode free of any proxy fields', async () => {
+    const wrapper = mountModalWithNativeSelects(proxies)
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('direct account')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('sk-test')
+    await wrapper.get('[data-testid="proxy-assignment"]').setValue('direct')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    const payload = createAccountMock.mock.calls[0]?.[0]
+    expect(payload?.proxy_id).toBeNull()
+    expect(payload?.proxy_mode).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('passes proxy_mode to Codex session import when auto-selecting', async () => {
+    importCodexSessionMock.mockResolvedValue({
+      created: 1,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+      warnings: []
+    })
+    const wrapper = mountModalWithNativeSelects(proxies)
+    await selectButtonByText(wrapper, 'OpenAI')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('codex import')
+    await wrapper.get('[data-testid="proxy-assignment"]').setValue('random')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    await wrapper.get('[data-testid="import-codex-session"]').trigger('click')
+    await flushPromises()
+
+    expect(importCodexSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ proxy_id: null, proxy_mode: 'random' })
+    )
+    wrapper.unmount()
+  })
+})

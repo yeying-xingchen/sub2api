@@ -223,11 +223,6 @@ export default {
         passkeyOrigins: 'Allowed HTTPS origins',
         passkeyValueNotConfigured: 'Not configured',
         passkeyDeploymentHint: 'Ask the server operator to set webauthn.enabled to true, configure webauthn.rp_id (domain only) and webauthn.rp_origins (full HTTPS origins), then restart the service.',
-        stepUp: 'Step-up 2FA for Sensitive Operations',
-        stepUpHint: 'When enabled, sensitive operations (account/proxy export, backup creation and download, S3 config changes, promoting admins) require a recent TOTP verification (valid for 15 minutes). Your own account must have 2FA enabled before turning this on; turning it off also requires step-up verification.',
-        stepUpEnableRequiresTotp: 'Enable 2FA (TOTP) for your own account in Profile before turning on step-up verification.',
-        sessionBinding: 'Session IP/UA Binding',
-        sessionBindingHint: 'Bind login sessions to the client IP and User-Agent. Any change immediately invalidates the session and forces re-login, raising the bar for stolen-credential reuse.',
         auditRetention: 'Audit Log Retention (days)',
         auditRetentionHint: 'Audit logs older than this are cleaned up automatically. Set to 0 to keep them forever (manual clear only).'
       },
@@ -316,10 +311,10 @@ export default {
       apiKeyAcl: {
         title: 'API Key IP Access Control',
         description:
-          'Choose which client IP is used by API Key allowlists/denylists, admin audit logs, and session IP/UA binding',
+          'Choose which client IP is used by API Key allowlists/denylists and admin audit logs',
         trustForwardedIp: 'Trust forwarded client IP',
         trustForwardedIpHint:
-          'Enabled by default for upgrade compatibility. When enabled, raw CF-Connecting-IP, X-Real-IP, or X-Forwarded-For values take over server.trusted_proxies for client-IP resolution. Disable it to enforce the Gin trusted-proxy chain configured by server.trusted_proxies. Only enable takeover mode when the origin cannot be reached directly. Changing this switch changes existing session IP fingerprints.',
+          'Enabled by default for upgrade compatibility. When enabled, raw CF-Connecting-IP, X-Real-IP, or X-Forwarded-For values take over server.trusted_proxies for client-IP resolution. Disable it to enforce the Gin trusted-proxy chain configured by server.trusted_proxies. Only enable takeover mode when the origin cannot be reached directly.',
         forwardedClientIpHeaders: 'Custom client-IP headers',
         forwardedClientIpHeadersHint: 'Add CDN or proxy header names to check before the built-in headers.',
         forwardedClientIpHeadersPlaceholder: 'X-Client-IP',

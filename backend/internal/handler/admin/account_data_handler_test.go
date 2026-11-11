@@ -317,3 +317,58 @@ func TestImportDataReusesProxyAndSkipsDefaultGroup(t *testing.T) {
 	require.Len(t, adminSvc.createdAccounts, 1)
 	require.True(t, adminSvc.createdAccounts[0].SkipDefaultGroupBind)
 }
+
+func TestImportDataAssignsAutoProxyOnlyWhenAccountHasNoProxyKey(t *testing.T) {
+	router, adminSvc := setupAccountDataRouter()
+
+	dataPayload := map[string]any{
+		"data": map[string]any{
+			"type":    dataType,
+			"version": dataVersion,
+			"proxies": []map[string]any{},
+			"accounts": []map[string]any{
+				{
+					"name":        "auto-proxy",
+					"platform":    service.PlatformOpenAI,
+					"type":        service.AccountTypeOAuth,
+					"credentials": map[string]any{"access_token": "token-1"},
+					"concurrency": 3,
+					"priority":    50,
+				},
+				{
+					"name":        "keep-proxy",
+					"platform":    service.PlatformOpenAI,
+					"type":        service.AccountTypeOAuth,
+					"credentials": map[string]any{"access_token": "token-2"},
+					"proxy_key":   "http|127.0.0.1|8080||",
+					"concurrency": 3,
+					"priority":    50,
+				},
+			},
+		},
+		"skip_default_group_bind": true,
+		"proxy_mode":              "least_used",
+	}
+	adminSvc.proxies = []service.Proxy{{
+		ID:       9,
+		Name:     "pool",
+		Protocol: "http",
+		Host:     "127.0.0.1",
+		Port:     8080,
+		Status:   service.StatusActive,
+	}}
+
+	body, _ := json.Marshal(dataPayload)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/data", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	require.Len(t, adminSvc.createdAccounts, 2)
+	require.Equal(t, "least_used", adminSvc.createdAccounts[0].ProxyMode)
+	require.Nil(t, adminSvc.createdAccounts[0].ProxyID)
+	require.Equal(t, "", adminSvc.createdAccounts[1].ProxyMode)
+	require.NotNil(t, adminSvc.createdAccounts[1].ProxyID)
+	require.EqualValues(t, 9, *adminSvc.createdAccounts[1].ProxyID)
+}

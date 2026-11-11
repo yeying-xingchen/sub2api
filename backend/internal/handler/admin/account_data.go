@@ -75,6 +75,10 @@ type DataAccount struct {
 type DataImportRequest struct {
 	Data                 DataPayload `json:"data"`
 	SkipDefaultGroupBind *bool       `json:"skip_default_group_bind"`
+	// ProxyMode 只作用于没有 proxy_key 的账号；文件内已绑定的代理优先。
+	ProxyMode   string `json:"proxy_mode"`
+	ProxyID     *int64 `json:"proxy_id"`
+	RandomProxy bool   `json:"random_proxy"`
 }
 
 type DataImportResult struct {
@@ -250,6 +254,10 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 
 	dataPayload := req.Data
 	result := DataImportResult{}
+	proxyMode, err := service.NormalizeAccountProxyMode(req.ProxyMode, req.ProxyID, req.RandomProxy)
+	if err != nil {
+		return result, err
+	}
 
 	existingProxies, err := h.listAllProxies(ctx)
 	if err != nil {
@@ -448,6 +456,13 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 			ExpiresAt:            item.ExpiresAt,
 			AutoPauseOnExpired:   item.AutoPauseOnExpired,
 			SkipDefaultGroupBind: skipDefaultGroupBind,
+		}
+		if proxyID == nil && proxyMode != "" {
+			if proxyMode == "specified" {
+				accountInput.ProxyID = req.ProxyID
+			} else {
+				accountInput.ProxyMode = proxyMode
+			}
 		}
 
 		created, err := h.adminService.CreateAccount(ctx, accountInput)

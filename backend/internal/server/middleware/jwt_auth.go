@@ -14,10 +14,8 @@ import (
 func NewJWTAuthMiddleware(
 	authService *service.AuthService,
 	userService *service.UserService,
-	settingService *service.SettingService,
-	auditService *service.AuditLogService,
 ) JWTAuthMiddleware {
-	return JWTAuthMiddleware(jwtAuth(authService, userService, userService, settingService, auditService))
+	return JWTAuthMiddleware(jwtAuth(authService, userService, userService))
 }
 
 type jwtUserReader interface {
@@ -33,8 +31,6 @@ func jwtAuth(
 	authService *service.AuthService,
 	userService jwtUserReader,
 	activityToucher userActivityToucher,
-	settingService *service.SettingService,
-	auditService *service.AuditLogService,
 ) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 从Authorization header中提取token
@@ -89,11 +85,6 @@ func jwtAuth(
 		// This check ensures tokens issued before a password change are rejected
 		if claims.TokenVersion != user.TokenVersion {
 			AbortWithError(c, 401, "TOKEN_REVOKED", "Token has been revoked (password changed)")
-			return
-		}
-
-		// 会话绑定校验：IP/UA 任一变化即撤销会话（功能可在系统设置中关闭）
-		if !enforceSessionBinding(c, authService, settingService, auditService, claims) {
 			return
 		}
 

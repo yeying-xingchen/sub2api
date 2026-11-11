@@ -13,12 +13,6 @@ vi.mock('vue-router', () => ({ useRoute: () => routeState.current }))
 vi.mock('@/api/mcp', () => ({ mcpAPI: { previewAuthorization, authorize } }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('@/components/auth/TotpStepUpDialog.vue', () => ({
-  default: {
-    props: ['controller'],
-    template: '<div v-if="controller.visible.value" data-testid="step-up"><button data-testid="step-up-verify" @click="controller.onVerified()">Verify</button><button data-testid="step-up-cancel" @click="controller.onCancel()">Cancel</button></div>'
-  }
-}))
 const request: MCPAuthorization = {
   response_type: 'code', client_id: 'client-1', redirect_uri: 'https://client.example.com/callback?workspace=team',
   scope: 'mcp', state: 'opaque+value&with=reserved?characters', code_challenge: 'a'.repeat(43),
@@ -135,9 +129,9 @@ describe('MCP OAuth consent', () => {
     expect(assign).toHaveBeenCalledWith(deniedURL)
   })
 
-  it('requires admin step-up before retrying approval and keeps selected permissions', async () => {
+  it('approves admin write access without extra verification and keeps selected permissions', async () => {
     auth.isAdmin = true
-    authorize.mockRejectedValueOnce({ reason: 'STEP_UP_REQUIRED' }).mockResolvedValueOnce({ redirect_url: redirectURL })
+    authorize.mockResolvedValue({ redirect_url: redirectURL })
     const wrapper = render()
     await flushPromises()
     expect((wrapper.get('#mcp-consent-scope').element as HTMLSelectElement).value).toBe('user')
@@ -146,15 +140,11 @@ describe('MCP OAuth consent', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(authorize).toHaveBeenCalledTimes(1)
-    expect(assign).not.toHaveBeenCalled()
-    await wrapper.get('[data-testid="step-up-verify"]').trigger('click')
-    await flushPromises()
-    expect(authorize).toHaveBeenCalledTimes(2)
-    expect(authorize.mock.calls[1][0]).toEqual({ authorization: request, approved: true, scope: 'admin', read_only: false })
+    expect(authorize.mock.calls[0][0]).toEqual({ authorization: request, approved: true, scope: 'admin', read_only: false })
     expect(assign).toHaveBeenCalledWith(redirectURL)
   })
 
-  it('explains that administrator write access always needs two-factor verification', async () => {
+  it('shows the administrator write access hint', async () => {
     auth.isAdmin = true
     const wrapper = render()
     await flushPromises()
@@ -165,22 +155,6 @@ describe('MCP OAuth consent', () => {
     expect(wrapper.get('[data-testid="admin-write-hint"]').text()).toBe('mcp.adminWriteHint')
     await wrapper.get('#mcp-consent-permissions').setValue('true')
     expect(wrapper.find('[data-testid="admin-write-hint"]').exists()).toBe(false)
-  })
-
-  it('cancels admin step-up without granting access', async () => {
-    auth.isAdmin = true
-    authorize.mockRejectedValue({ reason: 'STEP_UP_REQUIRED' })
-    const wrapper = render()
-    await flushPromises()
-    await wrapper.get('#mcp-consent-scope').setValue('admin')
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-    await wrapper.get('[data-testid="step-up-cancel"]').trigger('click')
-    await flushPromises()
-    expect(authorize).toHaveBeenCalledTimes(1)
-    expect(assign).not.toHaveBeenCalled()
-    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
-    expect((wrapper.get('[data-testid="approve"]').element as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('reports submission failures without navigating', async () => {

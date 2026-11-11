@@ -83,7 +83,7 @@ func newPasskeyPwService(t *testing.T, user *User) (*PasskeyService, *passkeyPwR
 }
 
 // 注册与吊销必须验证账号密码：被窃会话不得静默添加/移除凭据。
-// 用密码而非 TOTP step-up，保证未配置 TOTP 加密密钥的部署同样受保护。
+// 用密码而非 TOTP，保证未配置 TOTP 加密密钥的部署同样受保护。
 func TestPasskeyEnrollmentAndRevocationRequireAccountPassword(t *testing.T) {
 	user := &User{ID: 7, Email: "user@example.com", Status: StatusActive}
 	require.NoError(t, user.SetPassword("correct-password"))

@@ -327,7 +327,6 @@
         </div>
       </BaseDialog>
 
-      <TotpStepUpDialog :controller="pluginStepUp" />
     </div>
   </AppLayout>
 </template>
@@ -344,13 +343,6 @@ import { useAppStore } from "@/stores";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import BaseDialog from "@/components/common/BaseDialog.vue";
 import Icon from "@/components/icons/Icon.vue";
-import TotpStepUpDialog from "@/components/auth/TotpStepUpDialog.vue";
-import {
-  isStepUpBlocked,
-  isStepUpCancelled,
-  stepUpBlockReason,
-  useStepUp,
-} from "@/composables/useStepUp";
 
 interface PluginBridgeMessage {
   source?: string;
@@ -365,7 +357,6 @@ interface PluginBridgeMessage {
 
 const { t } = useI18n();
 const appStore = useAppStore();
-const pluginStepUp = useStepUp();
 const plugins = ref<PluginInstallation[]>([]);
 const loading = ref(false);
 const uploading = ref(false);
@@ -392,15 +383,6 @@ function errorMessage(error: unknown): string {
 }
 
 function reportSensitiveActionError(error: unknown): void {
-  if (isStepUpCancelled(error)) return;
-  if (isStepUpBlocked(error)) {
-    appStore.showError(
-      stepUpBlockReason(error) === "STEP_UP_ADMIN_API_KEY_FORBIDDEN"
-        ? t("stepUp.adminApiKeyForbidden")
-        : t("stepUp.notEnabled"),
-    );
-    return;
-  }
   appStore.showError(errorMessage(error));
 }
 
@@ -428,7 +410,7 @@ async function handleFileSelected(event: Event): Promise<void> {
   }
   uploading.value = true;
   try {
-    await pluginStepUp.run(() => adminAPI.plugins.upload(file));
+    await adminAPI.plugins.upload(file);
     appStore.showSuccess(t("admin.plugins.uploadSuccess"));
     await loadPlugins();
   } catch (error: unknown) {
@@ -463,12 +445,10 @@ async function enablePlugin(plugin: PluginInstallation): Promise<void> {
   }
   busyID.value = plugin.id;
   try {
-    await pluginStepUp.run(() =>
-      adminAPI.plugins.enable(
-        plugin.id,
-        rolloutValues.value[plugin.id] || 100,
-        acceptUntested,
-      ),
+    await adminAPI.plugins.enable(
+      plugin.id,
+      rolloutValues.value[plugin.id] || 100,
+      acceptUntested,
     );
     appStore.showSuccess(t("admin.plugins.enableSuccess"));
     await loadPlugins();
@@ -483,7 +463,7 @@ async function disablePlugin(plugin: PluginInstallation): Promise<void> {
   if (!window.confirm(t("admin.plugins.confirmDisable"))) return;
   busyID.value = plugin.id;
   try {
-    await pluginStepUp.run(() => adminAPI.plugins.disable(plugin.id));
+    await adminAPI.plugins.disable(plugin.id);
     appStore.showSuccess(t("admin.plugins.disableSuccess"));
     await loadPlugins();
   } catch (error: unknown) {
@@ -497,7 +477,7 @@ async function uninstallPlugin(plugin: PluginInstallation): Promise<void> {
   if (!window.confirm(t("admin.plugins.confirmUninstall"))) return;
   busyID.value = plugin.id;
   try {
-    await pluginStepUp.run(() => adminAPI.plugins.remove(plugin.id));
+    await adminAPI.plugins.remove(plugin.id);
     appStore.showSuccess(t("admin.plugins.uninstallSuccess"));
     await loadPlugins();
   } catch (error: unknown) {
@@ -510,9 +490,7 @@ async function uninstallPlugin(plugin: PluginInstallation): Promise<void> {
 async function testPlugin(plugin: PluginInstallation): Promise<void> {
   busyID.value = plugin.id;
   try {
-    const result = await pluginStepUp.run(() =>
-      adminAPI.plugins.test(plugin.id),
-    );
+    const result = await adminAPI.plugins.test(plugin.id);
     if (result.success)
       appStore.showSuccess(result.message || t("admin.plugins.testSuccess"));
     else appStore.showError(result.message || t("common.error"));
@@ -642,20 +620,16 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
         ) {
           throw new Error(t("admin.plugins.bridgeRejected"));
         }
-        const config = await pluginStepUp.run(() =>
-          adminAPI.plugins.saveConfig(
-            configPlugin.value!.id,
-            message.config as Record<string, unknown>,
-          ),
+        const config = await adminAPI.plugins.saveConfig(
+          configPlugin.value!.id,
+          message.config as Record<string, unknown>,
         );
         postBridgeResult(message, { ok: true, config });
         appStore.showSuccess(t("common.saved"));
         break;
       }
       case "config.test": {
-        const result = await pluginStepUp.run(() =>
-          adminAPI.plugins.test(configPlugin.value!.id),
-        );
+        const result = await adminAPI.plugins.test(configPlugin.value!.id);
         postBridgeResult(message, { ok: result.success, result });
         // A successful result is delivered back to the plugin UI, which owns how it
         // presents it (inline status, or an explicit ui.notify). Only force a host
@@ -668,8 +642,8 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
       }
       case "plugin.status": {
         // Read-only runtime status (the plugin's Health snapshot). It has no side
-        // effects, so it is intentionally NOT step-up gated and never raises a host
-        // toast — the plugin UI renders it however it likes. This is the generic
+        // effects, so it never raises a host toast — the plugin UI renders it
+        // however it likes. This is the generic
         // channel for any plugin to surface live state without abusing config.test.
         const result = await adminAPI.plugins.status(configPlugin.value!.id);
         postBridgeResult(message, { ok: true, result });
@@ -694,11 +668,8 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
       }
     }
   } catch (error: unknown) {
-    if (isStepUpBlocked(error)) reportSensitiveActionError(error);
-    postBridgeResult(message, {
-      ok: false,
-      error: isStepUpCancelled(error) ? t("common.cancel") : errorMessage(error),
-    });
+    reportSensitiveActionError(error);
+    postBridgeResult(message, { ok: false, error: errorMessage(error) });
   }
 }
 

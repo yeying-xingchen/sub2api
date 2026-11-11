@@ -82,7 +82,6 @@
         <button type="button" data-test="full-access-confirm" class="btn btn-danger" :disabled="fullAccessPhrase !== t('adminAccessKeys.fullAccessPhrase')" @click="confirmFullAccess">{{ t('adminAccessKeys.fullAccessConfirmTitle') }}</button>
       </template>
     </BaseDialog>
-    <TotpStepUpDialog :controller="stepUp" />
   </section>
 </template>
 
@@ -94,13 +93,10 @@ import type { AccessRule, AdminKey, AdminKeyInput, Permission } from '@/api/admi
 import { getAllIncludingInactive } from '@/api/admin/groups'
 import { CONCRETE_PLATFORM_OPTIONS } from '@/constants/platforms'
 import BaseDialog from '@/components/common/BaseDialog.vue'
-import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import { useAdminAccessKeyPermissions } from '@/composables/useAdminAccessKeyPermissions'
-import { isStepUpCancelled, useStepUp } from '@/composables/useStepUp'
 
 const { t, locale } = useI18n()
 const { permissionLabel, permissionCategory } = useAdminAccessKeyPermissions()
-const stepUp = useStepUp()
 const items = ref<AdminKey[]>([])
 const permissions = ref<Permission[]>([])
 const groups = ref<{ id: number; name: string }[]>([])
@@ -154,7 +150,7 @@ function ruleSummary(rule: AccessRule): string {
   return t('adminAccessKeys.ruleSummary', { groups: groupLabel, types, platforms, count: rule.permissions.length })
 }
 function emptyRule(): AccessRule { return { permissions: [], group_ids: [], all_groups: false, include_ungrouped: false, account_types: [], platforms: [] } }
-function report(e: unknown) { if (!isStepUpCancelled(e)) error.value = (e as { message?: string })?.message || t('adminAccessKeys.operationFailed') }
+function report(e: unknown) { error.value = (e as { message?: string })?.message || t('adminAccessKeys.operationFailed') }
 async function load() {
   loading.value = true
   error.value = ''
@@ -199,7 +195,7 @@ function confirmFullAccess() {
 }
 async function mutate(action: () => Promise<void>) {
   busy.value = true; error.value = ''; notice.value = ''; secret.value = ''
-  try { await stepUp.run(action) } catch (e) { report(e) } finally { busy.value = false }
+  try { await action() } catch (e) { report(e) } finally { busy.value = false }
 }
 function replace(item: AdminKey) { items.value = [normalizeItem(item), ...items.value.filter(key => key.id !== item.id)] }
 async function save() {

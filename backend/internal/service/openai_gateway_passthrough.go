@@ -702,6 +702,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
 		return nil, err
 	}
+	if account.UsesOpenAICodexProtocol() {
+		if err := s.injectCodexTurnState(ctx, account, body, req); err != nil {
+			return nil, err
+		}
+	}
 	return req, nil
 }
 
@@ -756,19 +761,12 @@ func shouldFailoverOpenAIPassthroughResponse(account *Account, statusCode int, r
 	case http.StatusTooManyRequests, 529:
 		return true
 	}
-	if account == nil || account.Type != AccountTypeAPIKey {
-		return false
-	}
-	switch statusCode {
-	case http.StatusInternalServerError,
-		http.StatusBadGateway,
-		http.StatusServiceUnavailable,
-		http.StatusGatewayTimeout,
-		520, 521, 522, 523, 524:
+	// 临时 5xx 与账号类型无关：OAuth 账号同样先同账号重试、再换号，
+	// 避免把瞬时上游故障直接暴露给客户端。
+	if account != nil && isTransientUpstream5xxStatus(statusCode) {
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 func writeOpenAIPassthroughErrorHeaders(dst, src http.Header) {

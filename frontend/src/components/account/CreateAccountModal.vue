@@ -3229,7 +3229,39 @@
           <label class="input-label mb-0">{{ t('admin.accounts.proxy') }}</label>
           <ProxyAdBanner />
         </div>
-        <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
+        <div class="space-y-2">
+          <Select
+            v-model="proxyAssignment"
+            :options="proxyAssignmentOptions"
+            data-testid="proxy-assignment"
+          />
+          <ProxySelector
+            v-if="proxyAssignment === 'specified'"
+            v-model="form.proxy_id"
+            :proxies="proxies"
+          />
+          <p v-else-if="proxyAssignment === 'direct'" class="input-hint">
+            {{ t('admin.accounts.proxyDirectHint') }}
+          </p>
+          <div
+            v-else
+            class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-dark-600"
+          >
+            <span class="truncate text-sm text-gray-700 dark:text-dark-200">
+              {{
+                selectedAutoProxy
+                  ? t('admin.accounts.proxyAutoSelected', { name: selectedAutoProxy.name })
+                  : t('admin.accounts.proxyAutoNone')
+              }}
+            </span>
+            <button type="button" class="btn btn-secondary btn-sm shrink-0" @click="reselectAutoProxy">
+              {{ t('admin.accounts.proxyAutoReselect') }}
+            </button>
+          </div>
+          <p v-if="proxyAssignment !== 'specified'" class="input-hint">
+            {{ t('admin.accounts.proxyAssignmentHint') }}
+          </p>
+        </div>
       </div>
 
       <UpstreamRequestIdHeaderField
@@ -5049,6 +5081,92 @@ const form = reactive({
   expires_at: null as number | null
 })
 
+type ProxyAssignmentMode = 'specified' | 'least_used' | 'random' | 'direct'
+const proxyAssignment = ref<ProxyAssignmentMode>('specified')
+const isAutoProxyAssignment = computed(
+  () => proxyAssignment.value === 'least_used' || proxyAssignment.value === 'random'
+)
+const proxyAssignmentOptions = computed(() => [
+  { value: 'specified', label: t('admin.accounts.proxyAssignmentSpecified') },
+  { value: 'least_used', label: t('admin.accounts.proxyAssignmentLeastUsed') },
+  { value: 'random', label: t('admin.accounts.proxyAssignmentRandom') },
+  { value: 'direct', label: t('admin.accounts.proxyAssignmentDirect') }
+])
+const eligibleAutoProxies = computed(() => {
+  const now = Date.now()
+  return props.proxies.filter((proxy) => {
+    if (proxy.status !== 'active') return false
+    if (!proxy.expires_at) return true
+    const expiresAt = Date.parse(proxy.expires_at)
+    return Number.isNaN(expiresAt) || expiresAt > now
+  })
+})
+const selectedAutoProxy = computed(
+  () => props.proxies.find((proxy) => proxy.id === form.proxy_id) ?? null
+)
+
+const pickAutoProxyId = (): number | null => {
+  const candidates = eligibleAutoProxies.value
+  if (candidates.length === 0) return null
+  if (proxyAssignment.value === 'random') {
+    return candidates[Math.floor(Math.random() * candidates.length)]?.id ?? null
+  }
+  let minUsage = Number.POSITIVE_INFINITY
+  for (const proxy of candidates) {
+    minUsage = Math.min(minUsage, proxy.account_count ?? 0)
+  }
+  const leastUsed = candidates.filter((proxy) => (proxy.account_count ?? 0) === minUsage)
+  return leastUsed[Math.floor(Math.random() * leastUsed.length)]?.id ?? null
+}
+
+const reselectAutoProxy = () => {
+  if (!isAutoProxyAssignment.value) return
+  form.proxy_id = pickAutoProxyId()
+  if (form.proxy_id == null) {
+    appStore.showWarning(t('admin.accounts.proxyAutoUnavailable'))
+  }
+}
+
+const ensureConcreteAutoProxy = (): boolean => {
+  if (!isAutoProxyAssignment.value) return true
+  if (
+    form.proxy_id != null &&
+    eligibleAutoProxies.value.some((proxy) => proxy.id === form.proxy_id)
+  ) {
+    return true
+  }
+  form.proxy_id = pickAutoProxyId()
+  if (form.proxy_id == null) {
+    appStore.showError(t('admin.accounts.proxyAutoUnavailable'))
+    return false
+  }
+  return true
+}
+
+watch(proxyAssignment, (mode) => {
+  if (mode === 'direct') {
+    form.proxy_id = null
+    return
+  }
+  if (mode === 'least_used' || mode === 'random') {
+    reselectAutoProxy()
+  }
+})
+
+watch(
+  () => props.proxies,
+  () => {
+    if (!isAutoProxyAssignment.value) return
+    if (
+      form.proxy_id != null &&
+      eligibleAutoProxies.value.some((proxy) => proxy.id === form.proxy_id)
+    ) {
+      return
+    }
+    reselectAutoProxy()
+  }
+)
+
 // Helper to check if current type needs OAuth flow
 const isOAuthFlow = computed(() => {
   // Antigravity upstream 类型不需要 OAuth 流程
@@ -5632,6 +5750,7 @@ const resetForm = () => {
   form.type = 'oauth'
   form.credentials = {}
   form.proxy_id = null
+  proxyAssignment.value = 'specified'
   form.concurrency = 10
   form.load_factor = null
   form.priority = 1
@@ -5865,15 +5984,40 @@ const buildAnthropicExtra = (base?: Record<string, unknown>): Record<string, unk
   return Object.keys(extra).length > 0 ? extra : undefined
 }
 
+// 统一把「代理分配」落到创建请求上：OAuth 需要具体代理完成授权，
+// 其余类型直接把自动模式交给服务端选择。
+const prepareCreatePayloadProxy = (payload: CreateAccountRequest): CreateAccountRequest | null => {
+  const next: CreateAccountRequest = { ...payload }
+  delete next.proxy_mode
+  const mode = proxyAssignment.value
+  if (mode === 'direct') {
+    next.proxy_id = null
+    return next
+  }
+  if (mode === 'specified') {
+    return next
+  }
+  if (next.type === 'oauth' || next.type === 'setup-token') {
+    if (!ensureConcreteAutoProxy()) return null
+    next.proxy_id = form.proxy_id
+    return next
+  }
+  next.proxy_id = null
+  next.proxy_mode = mode
+  return next
+}
+
 // Helper function to create account with mixed channel warning handling
 const doCreateAccount = async (payload: CreateAccountRequest) => {
+  const prepared = prepareCreatePayloadProxy(payload)
+  if (!prepared) return
   const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {
-    await submitCreateAccount(payload)
+    await submitCreateAccount(prepared)
   })
   if (!canContinue) {
     return
   }
-  await submitCreateAccount(payload)
+  await submitCreateAccount(prepared)
 }
 
 // Handle mixed channel warning confirmation
@@ -6256,6 +6400,7 @@ const goBackToBasicInfo = () => {
 }
 
 const handleGenerateUrl = async () => {
+  if (!ensureConcreteAutoProxy()) return
   if (form.platform === 'openai') {
     await openaiOAuth.generateAuthUrl(form.proxy_id)
   } else if (form.platform === 'gemini') {
@@ -6806,11 +6951,18 @@ const handleOpenAIImportCodexSession = async (content: string) => {
 
   try {
     const extra = buildOpenAICodexImportExtra()
+    const proxyFields = (() => {
+      if (proxyAssignment.value === 'direct') return { proxy_id: null, proxy_mode: undefined }
+      if (proxyAssignment.value === 'least_used' || proxyAssignment.value === 'random') {
+        return { proxy_id: null, proxy_mode: proxyAssignment.value }
+      }
+      return { proxy_id: form.proxy_id, proxy_mode: undefined }
+    })()
     const result = await adminAPI.accounts.importCodexSession({
       content: trimmed,
       name: form.name,
       notes: form.notes || null,
-      proxy_id: form.proxy_id,
+      ...proxyFields,
       concurrency: form.concurrency,
       load_factor: form.load_factor ?? undefined,
       priority: form.priority,
@@ -6873,6 +7025,7 @@ const handleOpenAIImportCodexPAT = async (accessToken: string) => {
     oauthClient.error.value = t('admin.accounts.oauth.openai.codexPatEmpty')
     return
   }
+  if (!ensureConcreteAutoProxy()) return
 
   const credentialExtras = buildOpenAICodexImportCredentialExtras()
   if (credentialExtras === null) {
@@ -6888,7 +7041,7 @@ const handleOpenAIImportCodexPAT = async (accessToken: string) => {
       access_token: trimmed,
       name: form.name,
       notes: form.notes || null,
-      proxy_id: form.proxy_id,
+      proxy_id: proxyAssignment.value === 'direct' ? null : form.proxy_id,
       concurrency: form.concurrency,
       load_factor: form.load_factor ?? undefined,
       priority: form.priority,

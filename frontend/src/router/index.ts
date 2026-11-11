@@ -549,6 +549,42 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/codex-tickets',
+    name: 'AdminCodexTickets',
+    component: () => import('@/views/admin/CodexTicketsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Codex Tickets',
+      titleKey: 'admin.codexTickets.title',
+      descriptionKey: 'admin.codexTickets.description'
+    }
+  },
+  {
+    path: '/admin/tickets',
+    name: 'AdminTickets',
+    component: () => import('@/views/admin/TicketManagementView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Ticket Management',
+      titleKey: 'admin.codexTickets.manage.title',
+      descriptionKey: 'admin.codexTickets.manage.description'
+    }
+  },
+  {
+    path: '/admin/pelican-tests',
+    name: 'AdminPelicanTests',
+    component: () => import('@/views/admin/PelicanTestsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Pelican IQ Test',
+      titleKey: 'admin.pelicanTests.title',
+      descriptionKey: 'admin.pelicanTests.description'
+    }
+  },
+  {
     path: '/admin/plugins',
     name: 'AdminPlugins',
     component: () => import('@/views/admin/PluginsView.vue'),

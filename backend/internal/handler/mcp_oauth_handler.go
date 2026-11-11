@@ -20,14 +20,12 @@ import (
 
 type MCPOAuthHandler struct {
 	oauth    *service.MCPOAuthService
-	totp     *service.TotpService
-	users    *service.UserService
 	settings *service.SettingService
 	cfg      *config.Config
 }
 
-func NewMCPOAuthHandler(oauth *service.MCPOAuthService, totp *service.TotpService, users *service.UserService, settings *service.SettingService, cfg *config.Config) *MCPOAuthHandler {
-	return &MCPOAuthHandler{oauth: oauth, totp: totp, users: users, settings: settings, cfg: cfg}
+func NewMCPOAuthHandler(oauth *service.MCPOAuthService, settings *service.SettingService, cfg *config.Config) *MCPOAuthHandler {
+	return &MCPOAuthHandler{oauth: oauth, settings: settings, cfg: cfg}
 }
 
 func (h *MCPOAuthHandler) Service() *service.MCPOAuthService { return h.oauth }
@@ -219,17 +217,6 @@ func (h *MCPOAuthHandler) Decide(c *gin.Context) {
 		role, _ := middleware.GetUserRoleFromContext(c)
 		if role != service.RoleAdmin {
 			response.Forbidden(c, "Only administrators can authorize admin MCP access")
-			return
-		}
-		// Administrator write grants outlive browser sessions, so they always
-		// need a fresh TOTP verification even when the global switch is off.
-		var verified bool
-		if input.ReadOnly != nil && !*input.ReadOnly {
-			verified = middleware.EnforceStepUpAlways(c, h.totp, h.users)
-		} else {
-			verified = middleware.EnforceStepUp(c, h.totp, h.users, h.settings)
-		}
-		if !verified {
 			return
 		}
 	}

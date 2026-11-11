@@ -32,13 +32,11 @@ const (
 
 // 内置审计动作名（认证/安全事件与特殊操作使用固定值，普通请求由路由自动推导）。
 const (
-	AuditActionLogin                  = "auth.login"
-	AuditActionLogin2FA               = "auth.login.2fa"
-	AuditActionRegister               = "auth.register"
-	AuditActionTokenRefresh           = "auth.token.refresh"
-	AuditActionSessionBindingMismatch = "auth.session_binding.mismatch"
-	AuditActionStepUpVerify           = "auth.step_up.verify"
-	AuditActionAuditLogClear          = "admin.audit_log.clear"
+	AuditActionLogin         = "auth.login"
+	AuditActionLogin2FA      = "auth.login.2fa"
+	AuditActionRegister      = "auth.register"
+	AuditActionTokenRefresh  = "auth.token.refresh"
+	AuditActionAuditLogClear = "admin.audit_log.clear"
 )
 
 // AuditLog 一条管理面操作审计记录。

@@ -184,8 +184,8 @@ func (h *PluginHandler) Test(c *gin.Context) {
 }
 
 // Status returns the plugin's passive runtime status for the config UI. It is
-// read-only (no config apply, no upstream call) and therefore not step-up gated,
-// so a status UI can poll it without a 2FA prompt or a "test" side effect.
+// read-only (no config apply, no upstream call), so a status UI can poll it
+// without triggering a side effect.
 func (h *PluginHandler) Status(c *gin.Context) {
 	id, ok := pluginIDParam(c)
 	if !ok {

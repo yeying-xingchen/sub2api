@@ -1556,6 +1556,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
 		return nil, err
 	}
+	if account.UsesOpenAICodexProtocol() {
+		if err := s.injectCodexTurnState(ctx, account, body, req); err != nil {
+			return nil, err
+		}
+	}
 	return req, nil
 }
 

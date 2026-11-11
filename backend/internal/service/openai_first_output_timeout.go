@@ -282,6 +282,9 @@ func (s *OpenAIGatewayService) newOpenAIFirstOutputTimeoutError(
 		StatusCode:      http.StatusGatewayTimeout,
 		ResponseBody:    []byte(`{"error":{"type":"first_output_timeout","message":"Upstream produced no output before the deadline"}}`),
 		ResponseHeaders: responseHeaders.Clone(), SafeToFailoverAfterWrite: true,
+		// 首包超时说明该账号当前生成过慢，重打同一账号只会再次等满超时；
+		// 保留原有的“直接换号”语义。
+		DisableSameAccountRetry: true,
 	}
 }
 

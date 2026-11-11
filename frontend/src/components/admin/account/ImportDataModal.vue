@@ -17,6 +17,12 @@
       </div>
 
       <div>
+        <label class="input-label">{{ t('admin.accounts.dataImportProxyMode') }}</label>
+        <Select v-model="proxyMode" :options="proxyModeOptions" />
+        <p class="input-hint">{{ t('admin.accounts.dataImportProxyModeHint') }}</p>
+      </div>
+
+      <div>
         <label class="input-label">{{ t('admin.accounts.dataImportFile') }}</label>
         <div
           class="flex items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3 transition-colors"
@@ -99,6 +105,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import Select from '@/components/common/Select.vue'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
 import type { AdminDataImportResult, AdminDataPayload } from '@/types'
@@ -120,6 +127,14 @@ const appStore = useAppStore()
 
 const importing = ref(false)
 const files = ref<File[]>([])
+type ImportProxyMode = 'file' | 'least_used' | 'random' | 'direct'
+const proxyMode = ref<ImportProxyMode>('file')
+const proxyModeOptions = computed(() => [
+  { value: 'file', label: t('admin.accounts.dataImportProxyModeFile') },
+  { value: 'least_used', label: t('admin.accounts.dataImportProxyModeLeastUsed') },
+  { value: 'random', label: t('admin.accounts.dataImportProxyModeRandom') },
+  { value: 'direct', label: t('admin.accounts.dataImportProxyModeDirect') }
+])
 const dragDepth = ref(0)
 const dragActive = computed(() => dragDepth.value > 0)
 const hasCreatedData = ref(false)
@@ -140,6 +155,7 @@ watch(
   (open) => {
     if (open) {
       files.value = []
+      proxyMode.value = 'file'
       dragDepth.value = 0
       hasCreatedData.value = false
       result.value = null
@@ -295,7 +311,8 @@ const handleImport = async () => {
 
     const res = await adminAPI.accounts.importData({
       data: dataPayload,
-      skip_default_group_bind: true
+      skip_default_group_bind: true,
+      proxy_mode: proxyMode.value === 'file' ? undefined : proxyMode.value
     })
 
     result.value = res

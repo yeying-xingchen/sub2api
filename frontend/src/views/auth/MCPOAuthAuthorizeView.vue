@@ -63,7 +63,6 @@
         </div>
       </form>
     </section>
-    <TotpStepUpDialog :controller="stepUp" />
   </main>
 </template>
 
@@ -72,15 +71,12 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { mcpAPI, type MCPAccessScope, type MCPAuthorization, type MCPConsent } from '@/api/mcp'
-import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import { Icon } from '@/components/icons'
-import { isStepUpBlocked, isStepUpCancelled, stepUpBlockReason, useStepUp } from '@/composables/useStepUp'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const route = useRoute()
 const authStore = useAuthStore()
-const stepUp = useStepUp()
 const loading = ref(true)
 const submitting = ref(false)
 const previewError = ref('')
@@ -128,7 +124,6 @@ function validatePreview(result: MCPConsent, request: MCPAuthorization): void {
 
 async function loadConsent(): Promise<void> {
   const current = ++generation
-  stepUp.onCancel()
   loading.value = true
   submitting.value = false
   previewError.value = ''
@@ -164,18 +159,8 @@ async function decide(approved: boolean): Promise<void> {
   submitting.value = true
   submitError.value = ''
   try {
-    const action = async () => {
-      // A changed route or unmounted page must not retry a previous consent.
-      if (current !== generation) throw new Error(t('mcp.invalidRequest'))
-      try {
-        return await mcpAPI.authorize(input)
-      } catch (error) {
-        // Do not open a step-up prompt for a request that is no longer shown.
-        if (current !== generation) throw new Error(t('mcp.invalidRequest'))
-        throw error
-      }
-    }
-    const result = approved && input.scope === 'admin' ? await stepUp.run(action) : await action()
+    if (current !== generation) throw new Error(t('mcp.invalidRequest'))
+    const result = await mcpAPI.authorize(input)
     if (current !== generation) return
     const destination = new URL(result.redirect_url)
     if (destination.origin !== expectedRedirect.origin || destination.pathname !== expectedRedirect.pathname ||
@@ -185,11 +170,7 @@ async function decide(approved: boolean): Promise<void> {
     window.location.assign(result.redirect_url)
   } catch (error) {
     if (current !== generation) return
-    if (!isStepUpCancelled(error)) {
-      submitError.value = isStepUpBlocked(error)
-        ? stepUpBlockReason(error) === 'STEP_UP_ADMIN_API_KEY_FORBIDDEN' ? t('stepUp.adminApiKeyForbidden') : t('stepUp.notEnabled')
-        : errorMessage(error, t('mcp.consentSubmitFailed'))
-    }
+    submitError.value = errorMessage(error, t('mcp.consentSubmitFailed'))
     submitting.value = false
   }
 }
@@ -198,6 +179,5 @@ watch(() => route.fullPath, loadConsent, { immediate: true })
 onBeforeUnmount(() => {
   generation++
   authorization = null
-  stepUp.onCancel()
 })
 </script>

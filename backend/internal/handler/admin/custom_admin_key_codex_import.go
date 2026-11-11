@@ -16,8 +16,6 @@ import (
 
 type scopedCodexSessionImportRequest struct {
 	CodexSessionImportRequest
-	ProxyMode   string `json:"proxy_mode"`
-	RandomProxy bool   `json:"random_proxy"`
 }
 
 func validateScopedCodexRequest(req scopedCodexSessionImportRequest) error {

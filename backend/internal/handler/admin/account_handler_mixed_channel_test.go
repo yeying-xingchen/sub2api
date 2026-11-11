@@ -263,3 +263,46 @@ func TestBulkUpdateAcceptsDedicatedUpstreamBillingProbeSetting(t *testing.T) {
 	require.NotNil(t, adminSvc.lastBulkUpdateAccountInput.ProbeEnabled)
 	require.False(t, *adminSvc.lastBulkUpdateAccountInput.ProbeEnabled)
 }
+
+func TestAccountHandlerCreatePassesNormalizedProxyMode(t *testing.T) {
+	adminSvc := newStubAdminService()
+	router := setupAccountMixedChannelRouter(adminSvc)
+
+	body, _ := json.Marshal(map[string]any{
+		"name":        "auto-proxy",
+		"platform":    "openai",
+		"type":        "oauth",
+		"credentials": map[string]any{"access_token": "token"},
+		"proxy_mode":  "least_used",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, adminSvc.createdAccounts, 1)
+	require.Equal(t, "least_used", adminSvc.createdAccounts[0].ProxyMode)
+	require.Nil(t, adminSvc.createdAccounts[0].ProxyID)
+}
+
+func TestAccountHandlerCreateRejectsConflictingProxyMode(t *testing.T) {
+	adminSvc := newStubAdminService()
+	router := setupAccountMixedChannelRouter(adminSvc)
+
+	body, _ := json.Marshal(map[string]any{
+		"name":        "conflict",
+		"platform":    "openai",
+		"type":        "oauth",
+		"credentials": map[string]any{"access_token": "token"},
+		"proxy_id":    7,
+		"proxy_mode":  "random",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Empty(t, adminSvc.createdAccounts)
+}

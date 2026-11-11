@@ -41,6 +41,7 @@ type PelicanTestRecord struct {
 	Platform     string    `json:"platform"`
 	Model        string    `json:"model"`
 	Prompt       string    `json:"prompt"`
+	PlanID       int64     `json:"plan_id,omitempty"`
 	Output       string    `json:"output,omitempty"`
 	Status       string    `json:"status"`
 	ErrorMessage string    `json:"error_message,omitempty"`
@@ -78,6 +79,7 @@ type PelicanTestInput struct {
 	AccountID int64
 	Model     string
 	Prompt    string
+	PlanID    int64
 }
 
 // PelicanTestService 负责运行测试、解析作品与保存历史。
@@ -85,11 +87,13 @@ type PelicanTestService struct {
 	accountRepo AccountRepository
 	accountTest *AccountTestService
 	repo        PelicanTestRepository
+	planRepo    PelicanTestPlanRepository
 	running     sync.Map // accountID -> struct{}
+	scheduler   pelicanSchedulerState
 }
 
-func NewPelicanTestService(accountRepo AccountRepository, accountTest *AccountTestService, repo PelicanTestRepository) *PelicanTestService {
-	return &PelicanTestService{accountRepo: accountRepo, accountTest: accountTest, repo: repo}
+func NewPelicanTestService(accountRepo AccountRepository, accountTest *AccountTestService, repo PelicanTestRepository, planRepo PelicanTestPlanRepository) *PelicanTestService {
+	return &PelicanTestService{accountRepo: accountRepo, accountTest: accountTest, repo: repo, planRepo: planRepo}
 }
 
 func (s *PelicanTestService) Run(ctx context.Context, input PelicanTestInput) (*PelicanTestRecord, error) {
@@ -159,6 +163,7 @@ func (s *PelicanTestService) Run(ctx context.Context, input PelicanTestInput) (*
 		Platform:     account.Platform,
 		Model:        model,
 		Prompt:       prompt,
+		PlanID:       input.PlanID,
 		Output:       output,
 		Status:       status,
 		ErrorMessage: message,

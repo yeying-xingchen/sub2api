@@ -25,11 +25,11 @@ func (r *pelicanTestRepository) Create(ctx context.Context, record *service.Peli
 		return errors.New("invalid pelican test record")
 	}
 	return r.db.QueryRowContext(ctx, `
-		INSERT INTO pelican_tests (account_id, account_name, platform, model, prompt, output, status, error_message, latency_ms, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		INSERT INTO pelican_tests (account_id, account_name, platform, model, prompt, output, status, error_message, latency_ms, plan_id, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		RETURNING id
 	`, record.AccountID, record.AccountName, record.Platform, record.Model, record.Prompt,
-		record.Output, record.Status, record.ErrorMessage, record.LatencyMs, record.CreatedAt).Scan(&record.ID)
+		record.Output, record.Status, record.ErrorMessage, record.LatencyMs, record.PlanID, record.CreatedAt).Scan(&record.ID)
 }
 
 func (r *pelicanTestRepository) List(ctx context.Context, page, pageSize int) ([]service.PelicanTestListItem, int64, error) {
@@ -73,10 +73,10 @@ func (r *pelicanTestRepository) Get(ctx context.Context, id int64) (*service.Pel
 	var record service.PelicanTestRecord
 	var createdAt time.Time
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, account_id, account_name, platform, model, prompt, output, status, error_message, latency_ms, created_at
+		SELECT id, account_id, account_name, platform, model, prompt, output, status, error_message, latency_ms, plan_id, created_at
 		FROM pelican_tests WHERE id = $1
 	`, id).Scan(&record.ID, &record.AccountID, &record.AccountName, &record.Platform, &record.Model,
-		&record.Prompt, &record.Output, &record.Status, &record.ErrorMessage, &record.LatencyMs, &createdAt)
+		&record.Prompt, &record.Output, &record.Status, &record.ErrorMessage, &record.LatencyMs, &record.PlanID, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

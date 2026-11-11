@@ -134,6 +134,7 @@ func provideCleanup(
 	promptAudit *securityaudit.PromptService,
 	pluginManager *service.PluginManager,
 	codexTickets *service.CodexTicketService,
+	pelicanTests *service.PelicanTestService,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -363,6 +364,12 @@ func provideCleanup(
 			{"CodexTicketService", func() error {
 				if codexTickets != nil {
 					codexTickets.Stop()
+				}
+				return nil
+			}},
+			{"PelicanTestService", func() error {
+				if pelicanTests != nil {
+					pelicanTests.StopScheduler()
 				}
 				return nil
 			}},

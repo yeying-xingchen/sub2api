@@ -28,8 +28,8 @@ func ProvideGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthCli
 }
 
 // ProvidePelicanTestService wires the Pelican IQ test runner.
-func ProvidePelicanTestService(accountRepo AccountRepository, accountTest *AccountTestService, repo PelicanTestRepository) *PelicanTestService {
-	return NewPelicanTestService(accountRepo, accountTest, repo)
+func ProvidePelicanTestService(accountRepo AccountRepository, accountTest *AccountTestService, repo PelicanTestRepository, planRepo PelicanTestPlanRepository) *PelicanTestService {
+	return NewPelicanTestService(accountRepo, accountTest, repo, planRepo)
 }
 
 // ProvideCodexTicketService wires the Codex ticket store and settings port.

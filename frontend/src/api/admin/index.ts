@@ -127,7 +127,9 @@ export type { ErrorPassthroughRule, CreateRuleRequest, UpdateRuleRequest } from 
 export type {
   PelicanTestListItem,
   PelicanTestRecord,
-  PelicanTestListResult
+  PelicanTestListResult,
+  PelicanTestPlan,
+  PelicanTestPlanInput
 } from './pelicanTests'
 export type {
   CodexTicketSettings,

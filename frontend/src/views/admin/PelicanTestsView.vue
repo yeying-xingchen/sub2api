@@ -16,6 +16,98 @@
         </button>
       </div>
 
+      <section class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div>
+            <h2 class="text-lg font-medium text-gray-900 dark:text-white">
+              {{ t('admin.pelicanTests.plans.title') }}
+            </h2>
+            <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+              {{ t('admin.pelicanTests.plans.empty') }}
+            </p>
+          </div>
+          <button class="btn btn-primary" @click="openCreatePlan">
+            <Icon name="plus" size="md" class="mr-1" />
+            {{ t('admin.pelicanTests.plans.create') }}
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
+            <thead>
+              <tr class="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-dark-400">
+                <th class="px-4 py-3">{{ t('admin.pelicanTests.plans.account') }}</th>
+                <th class="px-4 py-3">{{ t('admin.pelicanTests.plans.model') }}</th>
+                <th class="px-4 py-3">{{ t('admin.pelicanTests.plans.cron') }}</th>
+                <th class="px-4 py-3">{{ t('admin.pelicanTests.plans.nextRun') }}</th>
+                <th class="px-4 py-3">{{ t('admin.pelicanTests.plans.lastRun') }}</th>
+                <th class="px-4 py-3">{{ t('admin.pelicanTests.plans.lastStatus') }}</th>
+                <th class="px-4 py-3 text-right">{{ t('admin.pelicanTests.plans.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+              <tr v-if="plans.length === 0">
+                <td colspan="7" class="px-4 py-8 text-center text-gray-500 dark:text-dark-400">
+                  {{ t('admin.pelicanTests.plans.empty') }}
+                </td>
+              </tr>
+              <tr v-for="plan in plans" :key="plan.id" class="hover:bg-gray-50 dark:hover:bg-dark-700/40">
+                <td class="px-4 py-3 text-gray-700 dark:text-gray-200">
+                  #{{ plan.account_id }} {{ plan.account_name }}
+                  <span
+                    class="ml-2 rounded-full px-2 py-0.5 text-[11px]"
+                    :class="plan.enabled
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                      : 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-dark-300'"
+                  >
+                    {{ plan.enabled ? t('admin.pelicanTests.plans.enabled') : t('admin.pelicanTests.plans.paused') }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ plan.model || '-' }}</td>
+                <td class="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">{{ plan.cron_expression }}</td>
+                <td class="px-4 py-3 text-gray-500 dark:text-dark-400">
+                  {{ plan.next_run_at ? formatDateTime(plan.next_run_at) : t('admin.pelicanTests.plans.never') }}
+                </td>
+                <td class="px-4 py-3 text-gray-500 dark:text-dark-400">
+                  {{ plan.last_run_at ? formatDateTime(plan.last_run_at) : t('admin.pelicanTests.plans.never') }}
+                </td>
+                <td class="px-4 py-3">
+                  <span
+                    class="rounded-full px-2 py-0.5 text-xs font-medium"
+                    :class="plan.last_status === 'success'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                      : plan.last_status === 'failed'
+                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                        : 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-dark-300'"
+                    :title="plan.last_error || ''"
+                  >
+                    {{ plan.last_status === 'success'
+                      ? t('admin.pelicanTests.status.success')
+                      : plan.last_status === 'failed'
+                        ? t('admin.pelicanTests.status.failed')
+                        : '-' }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <div class="flex flex-wrap items-center justify-end gap-2">
+                    <button class="btn btn-secondary" :disabled="runningPlanId === plan.id" @click="runPlanNow(plan)">
+                      {{ runningPlanId === plan.id
+                        ? t('admin.pelicanTests.plans.running')
+                        : t('admin.pelicanTests.plans.runNow') }}
+                    </button>
+                    <button class="btn btn-secondary" @click="openEditPlan(plan)">
+                      {{ t('admin.pelicanTests.plans.edit') }}
+                    </button>
+                    <button class="btn btn-danger" :disabled="deletingPlanId === plan.id" @click="askDeletePlan(plan)">
+                      {{ t('admin.pelicanTests.plans.delete') }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800 sm:p-6">
         <h2 class="text-lg font-medium text-gray-900 dark:text-white">
           {{ t('admin.pelicanTests.form.title') }}
@@ -165,6 +257,73 @@
         ></iframe>
       </div>
     </BaseDialog>
+
+    <BaseDialog
+      :show="showPlanDialog"
+      :title="editingPlan ? t('admin.pelicanTests.plans.editor.editTitle') : t('admin.pelicanTests.plans.editor.createTitle')"
+      width="normal"
+      @close="showPlanDialog = false"
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-900 dark:text-white">
+            {{ t('admin.pelicanTests.plans.editor.account') }}
+          </label>
+          <select v-model="planForm.accountId" class="input mt-2 w-full">
+            <option value="">{{ t('admin.pelicanTests.form.accountPlaceholder') }}</option>
+            <option v-for="account in accounts" :key="account.id" :value="account.id">
+              #{{ account.id }} {{ account.name }} · {{ account.platform }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-900 dark:text-white">
+            {{ t('admin.pelicanTests.plans.editor.model') }}
+          </label>
+          <input v-model="planForm.model" type="text" class="input mt-2 w-full" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-900 dark:text-white">
+            {{ t('admin.pelicanTests.plans.editor.prompt') }}
+          </label>
+          <textarea v-model="planForm.prompt" rows="4" class="input mt-2 w-full font-mono text-xs"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-900 dark:text-white">
+            {{ t('admin.pelicanTests.plans.editor.cron') }}
+          </label>
+          <input v-model="planForm.cronExpression" type="text" class="input mt-2 w-full font-mono text-xs" placeholder="0 9 * * *" />
+          <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+            {{ t('admin.pelicanTests.plans.editor.cronHint') }}
+          </p>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+          <input v-model="planForm.enabled" type="checkbox" class="h-4 w-4" />
+          {{ t('admin.pelicanTests.plans.editor.enabled') }}
+        </label>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <button class="btn btn-secondary" @click="showPlanDialog = false">
+            {{ t('admin.pelicanTests.plans.editor.cancel') }}
+          </button>
+          <button class="btn btn-primary" :disabled="savingPlan" @click="savePlan">
+            {{ t('admin.pelicanTests.plans.editor.save') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
+    <ConfirmDialog
+      :show="showDeletePlanDialog"
+      :title="t('admin.pelicanTests.plans.deleteTitle')"
+      :message="t('admin.pelicanTests.plans.deleteConfirm')"
+      :confirm-text="t('common.delete')"
+      :cancel-text="t('common.cancel')"
+      :danger="true"
+      @confirm="confirmDeletePlan"
+      @cancel="showDeletePlanDialog = false"
+    />
   </AppLayout>
 </template>
 
@@ -174,9 +333,10 @@ import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { useAppStore } from '@/stores/app'
 import { formatDateTime } from '@/utils/format'
-import { adminAPI, type PelicanTestListItem, type PelicanTestRecord } from '@/api/admin'
+import { adminAPI, type PelicanTestListItem, type PelicanTestPlan, type PelicanTestRecord } from '@/api/admin'
 import type { AccountListItem } from '@/types'
 
 const DEFAULT_PROMPT =
@@ -205,6 +365,22 @@ const form = reactive({
   prompt: DEFAULT_PROMPT
 })
 
+const plans = ref<PelicanTestPlan[]>([])
+const showPlanDialog = ref(false)
+const editingPlan = ref<PelicanTestPlan | null>(null)
+const savingPlan = ref(false)
+const runningPlanId = ref<number | null>(null)
+const deletingPlanId = ref<number | null>(null)
+const showDeletePlanDialog = ref(false)
+const pendingDeletePlan = ref<PelicanTestPlan | null>(null)
+const planForm = reactive({
+  accountId: '' as number | '',
+  model: '',
+  prompt: DEFAULT_PROMPT,
+  cronExpression: '0 9 * * *',
+  enabled: true
+})
+
 function errorMessage(error: unknown): string {
   if (error && typeof error === 'object' && 'message' in error) {
     return String((error as { message?: unknown }).message || '')
@@ -218,6 +394,106 @@ async function loadAccounts() {
     accounts.value = result.items
   } catch (error) {
     appStore.showError(t('admin.pelicanTests.messages.loadAccountsFailed', { error: errorMessage(error) }))
+  }
+}
+
+async function loadPlans() {
+  try {
+    plans.value = await adminAPI.pelicanTests.listPelicanPlans()
+  } catch (error) {
+    appStore.showError(t('admin.pelicanTests.messages.loadFailed', { error: errorMessage(error) }))
+  }
+}
+
+function openCreatePlan() {
+  editingPlan.value = null
+  planForm.accountId = ''
+  planForm.model = ''
+  planForm.prompt = DEFAULT_PROMPT
+  planForm.cronExpression = '0 9 * * *'
+  planForm.enabled = true
+  showPlanDialog.value = true
+}
+
+function openEditPlan(plan: PelicanTestPlan) {
+  editingPlan.value = plan
+  planForm.accountId = plan.account_id
+  planForm.model = plan.model
+  planForm.prompt = plan.prompt
+  planForm.cronExpression = plan.cron_expression
+  planForm.enabled = plan.enabled
+  showPlanDialog.value = true
+}
+
+async function savePlan() {
+  if (!planForm.accountId || !planForm.cronExpression.trim()) {
+    appStore.showError(t('admin.pelicanTests.plans.editor.required'))
+    return
+  }
+  savingPlan.value = true
+  try {
+    const payload = {
+      account_id: Number(planForm.accountId),
+      model: planForm.model.trim(),
+      prompt: planForm.prompt,
+      cron_expression: planForm.cronExpression.trim(),
+      enabled: planForm.enabled
+    }
+    if (editingPlan.value) {
+      await adminAPI.pelicanTests.updatePelicanPlan(editingPlan.value.id, payload)
+      appStore.showSuccess(t('admin.pelicanTests.plans.messages.updated'))
+    } else {
+      await adminAPI.pelicanTests.createPelicanPlan(payload)
+      appStore.showSuccess(t('admin.pelicanTests.plans.messages.created'))
+    }
+    showPlanDialog.value = false
+    await loadPlans()
+  } catch (error) {
+    appStore.showError(t('admin.pelicanTests.plans.messages.saveFailed', { error: errorMessage(error) }))
+  } finally {
+    savingPlan.value = false
+  }
+}
+
+async function runPlanNow(plan: PelicanTestPlan) {
+  runningPlanId.value = plan.id
+  try {
+    const record = await adminAPI.pelicanTests.runPelicanPlanNow(plan.id)
+    if (record.status === 'success') {
+      appStore.showSuccess(t('admin.pelicanTests.plans.messages.runDone'))
+    } else {
+      appStore.showError(t('admin.pelicanTests.messages.failed', { error: record.error_message || '-' }))
+    }
+    previewOutput.value = record.output
+    previewError.value = ''
+    showPreview.value = true
+    await Promise.all([loadPlans(), loadHistory()])
+  } catch (error) {
+    appStore.showError(t('admin.pelicanTests.plans.messages.runFailed', { error: errorMessage(error) }))
+  } finally {
+    runningPlanId.value = null
+  }
+}
+
+function askDeletePlan(plan: PelicanTestPlan) {
+  pendingDeletePlan.value = plan
+  showDeletePlanDialog.value = true
+}
+
+async function confirmDeletePlan() {
+  const plan = pendingDeletePlan.value
+  if (!plan) return
+  showDeletePlanDialog.value = false
+  deletingPlanId.value = plan.id
+  try {
+    await adminAPI.pelicanTests.deletePelicanPlan(plan.id)
+    appStore.showSuccess(t('admin.pelicanTests.plans.messages.deleted'))
+    await loadPlans()
+  } catch (error) {
+    appStore.showError(t('admin.pelicanTests.plans.messages.deleteFailed', { error: errorMessage(error) }))
+  } finally {
+    deletingPlanId.value = null
+    pendingDeletePlan.value = null
   }
 }
 
@@ -296,6 +572,6 @@ async function openPreview(id: number) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadAccounts(), loadHistory()])
+  await Promise.all([loadAccounts(), loadHistory(), loadPlans()])
 })
 </script>

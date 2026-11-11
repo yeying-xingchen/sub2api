@@ -17,6 +17,31 @@ export interface PelicanTestRecord extends PelicanTestListItem {
   output: string
 }
 
+export interface PelicanTestPlan {
+  id: number
+  account_id: number
+  account_name: string
+  model: string
+  prompt: string
+  cron_expression: string
+  enabled: boolean
+  max_results: number
+  last_run_at?: string
+  next_run_at?: string
+  last_status?: string
+  last_error?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PelicanTestPlanInput {
+  account_id: number
+  model?: string
+  prompt?: string
+  cron_expression: string
+  enabled: boolean
+}
+
 export interface PelicanTestListResult {
   items: PelicanTestListItem[]
   total: number
@@ -47,4 +72,39 @@ export async function getPelicanTest(id: number): Promise<PelicanTestRecord> {
   return data
 }
 
-export default { listPelicanTests, runPelicanTest, getPelicanTest }
+export async function listPelicanPlans(): Promise<PelicanTestPlan[]> {
+  const { data } = await apiClient.get<PelicanTestPlan[]>('/admin/pelican-test-plans')
+  return data
+}
+
+export async function createPelicanPlan(input: PelicanTestPlanInput): Promise<PelicanTestPlan> {
+  const { data } = await apiClient.post<PelicanTestPlan>('/admin/pelican-test-plans', input)
+  return data
+}
+
+export async function updatePelicanPlan(id: number, input: PelicanTestPlanInput): Promise<PelicanTestPlan> {
+  const { data } = await apiClient.put<PelicanTestPlan>(`/admin/pelican-test-plans/${id}`, input)
+  return data
+}
+
+export async function deletePelicanPlan(id: number): Promise<void> {
+  await apiClient.delete(`/admin/pelican-test-plans/${id}`)
+}
+
+export async function runPelicanPlanNow(id: number): Promise<PelicanTestRecord> {
+  const { data } = await apiClient.post<PelicanTestRecord>(`/admin/pelican-test-plans/${id}/run`, {}, {
+    timeout: 600000
+  })
+  return data
+}
+
+export default {
+  listPelicanTests,
+  runPelicanTest,
+  getPelicanTest,
+  listPelicanPlans,
+  createPelicanPlan,
+  updatePelicanPlan,
+  deletePelicanPlan,
+  runPelicanPlanNow
+}

@@ -48,6 +48,114 @@ func (h *AccountHandler) RunPelicanTest(c *gin.Context) {
 	response.Success(c, record)
 }
 
+type pelicanPlanRequest struct {
+	AccountID      int64  `json:"account_id"`
+	Model          string `json:"model"`
+	Prompt         string `json:"prompt"`
+	CronExpression string `json:"cron_expression"`
+	Enabled        bool   `json:"enabled"`
+}
+
+// ListPelicanTestPlans returns all scheduled Pelican plans.
+func (h *AccountHandler) ListPelicanTestPlans(c *gin.Context) {
+	if h.pelicanTests == nil {
+		response.Error(c, http.StatusServiceUnavailable, "pelican test service unavailable")
+		return
+	}
+	plans, err := h.pelicanTests.ListPlans(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.Success(c, plans)
+}
+
+// CreatePelicanTestPlan creates a scheduled Pelican plan.
+func (h *AccountHandler) CreatePelicanTestPlan(c *gin.Context) {
+	if h.pelicanTests == nil {
+		response.Error(c, http.StatusServiceUnavailable, "pelican test service unavailable")
+		return
+	}
+	var req pelicanPlanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid pelican plan: "+err.Error())
+		return
+	}
+	plan, err := h.pelicanTests.CreatePlan(c.Request.Context(), service.PelicanTestPlanInput{
+		AccountID: req.AccountID, Model: req.Model, Prompt: req.Prompt,
+		CronExpression: req.CronExpression, Enabled: req.Enabled,
+	})
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(c, plan)
+}
+
+// UpdatePelicanTestPlan updates a scheduled Pelican plan.
+func (h *AccountHandler) UpdatePelicanTestPlan(c *gin.Context) {
+	if h.pelicanTests == nil {
+		response.Error(c, http.StatusServiceUnavailable, "pelican test service unavailable")
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "invalid pelican plan id")
+		return
+	}
+	var req pelicanPlanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid pelican plan: "+err.Error())
+		return
+	}
+	plan, err := h.pelicanTests.UpdatePlan(c.Request.Context(), id, service.PelicanTestPlanInput{
+		AccountID: req.AccountID, Model: req.Model, Prompt: req.Prompt,
+		CronExpression: req.CronExpression, Enabled: req.Enabled,
+	})
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(c, plan)
+}
+
+// DeletePelicanTestPlan removes a scheduled plan.
+func (h *AccountHandler) DeletePelicanTestPlan(c *gin.Context) {
+	if h.pelicanTests == nil {
+		response.Error(c, http.StatusServiceUnavailable, "pelican test service unavailable")
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "invalid pelican plan id")
+		return
+	}
+	if err := h.pelicanTests.DeletePlan(c.Request.Context(), id); err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"message": "plan deleted"})
+}
+
+// RunPelicanTestPlanNow runs a plan immediately.
+func (h *AccountHandler) RunPelicanTestPlanNow(c *gin.Context) {
+	if h.pelicanTests == nil {
+		response.Error(c, http.StatusServiceUnavailable, "pelican test service unavailable")
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "invalid pelican plan id")
+		return
+	}
+	record, err := h.pelicanTests.RunPlanNow(c.Request.Context(), id)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(c, record)
+}
+
 // ListPelicanTests returns the paginated Pelican test history.
 func (h *AccountHandler) ListPelicanTests(c *gin.Context) {
 	if h.pelicanTests == nil {

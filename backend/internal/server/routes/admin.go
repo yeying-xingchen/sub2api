@@ -461,6 +461,15 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		pelican.POST("", h.Admin.Account.RunPelicanTest)
 		pelican.GET("/:id", h.Admin.Account.GetPelicanTest)
 	}
+
+	pelicanPlans := admin.Group("/pelican-test-plans")
+	{
+		pelicanPlans.GET("", h.Admin.Account.ListPelicanTestPlans)
+		pelicanPlans.POST("", h.Admin.Account.CreatePelicanTestPlan)
+		pelicanPlans.PUT("/:id", h.Admin.Account.UpdatePelicanTestPlan)
+		pelicanPlans.DELETE("/:id", h.Admin.Account.DeletePelicanTestPlan)
+		pelicanPlans.POST("/:id/run", h.Admin.Account.RunPelicanTestPlanNow)
+	}
 }
 
 func registerAnnouncementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
